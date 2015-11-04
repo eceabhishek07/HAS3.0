@@ -6,7 +6,8 @@
 //Define Address Size
 `define ADDRESSSIZE 32
 
-//Define the stimulus to the L1 Cache at Top level. This class contains all inputs to the DUT at Top level
+//Define the stimulus to the L1 Cache at Top level. 
+//This class contains all inputs to the DUT at Top level. To be used to generate random stimulus
 class singleCacheStimulus;
   
   //PrRd signal
@@ -135,8 +136,49 @@ class baseTestClass;
     assert(sintf.Com_Bus_Req_proc) $display("SUCCESS: sChecker: Com_Bus_Req_Proc is asserted within timeout after PrRd is asserted");
     else $fatal(1,"TEST:  Checker: Com_Bus_Req_Proc is not asserted after PrRd", $time);
    endtask : check_ComBusReqproc_CPUStall_assert
+   
+   //Task to wait and check for Com_Bus_Req_snoop to be asserted
+   virtual task check_ComBusReqSnoop_assert(virtual interface procMemCacheBusArbIntf sintf);
+      delay = 0;
+      fork
+        begin 
+         while(delay <= Max_Resp_Delay) begin
+           @(posedge sintf.clk);
+           delay += 1; 
+         end 
+        end
+        begin 
+           wait(sintf.Com_Bus_Req_snoop);
+        end
+      join_any
+      disable fork;
+    //Check if Com_Bus_Req_ is asserted  
+    assert(sintf.Com_Bus_Req_snoop) $display("SUCCESS: sChecker: Com_Bus_Req_snoop is asserted within timeout after BusRd is asserted");
+    else $fatal(1,"TEST:  Checker: Com_Bus_Req_snoop is not asserted after BusRd", $time);
+   endtask : check_ComBusReqSnoop_assert
+   
+   
+   //Task to wait and check for Com_Bus_Req_snoop to be deasserted
+   virtual task check_ComBusReqSnoop_deassert(virtual interface procMemCacheBusArbIntf sintf);
+      delay = 0;
+      fork
+        begin 
+         while(delay <= Max_Resp_Delay) begin
+           @(posedge sintf.clk);
+           delay += 1; 
+         end 
+        end
+        begin 
+           wait(!sintf.Com_Bus_Req_snoop);
+        end
+      join_any
+      disable fork;
+    //Check if Com_Bus_Req_ is asserted  
+    assert(!sintf.Com_Bus_Req_snoop) $display("SUCCESS: sChecker: Com_Bus_Req_snoop is deasserted within timeout after BusRd is asserted");
+    else $fatal(1,"TEST:  Checker: Com_Bus_Req_snoop is not deasserted after BusRd", $time);
+   endtask : check_ComBusReqSnoop_assert
  
-  //Task to wait for Com_Bus_Req_proc and CPU_Stall to be deasserted
+   //Task to wait for Com_Bus_Req_proc and CPU_Stall to be deasserted
    virtual task check_ComBusReqproc_CPUStall_deaassert(virtual interface procMemCacheBusArbIntf sintf);
       delay = 0;
       fork
@@ -227,12 +269,70 @@ class baseTestClass;
       end
     join_any
     disable fork;
-    assert(sintf.BusRdX); 
+    assert(sintf.BusRdX)
     else $fatal(" Checker: BusRdX  not asserted");
-
-  
   endtask : check_BusRdX_assert
+  
+  
+  //Task to wait till BusRdX is asserted
+  task check_MemOprnAbrt_assert(virtual interface procMemCacheBusArbIntf sintf);
+     delay = 0;
+    fork
+      begin 
+       while(delay <= Max_Resp_Delay) begin
+         @(posedge sintf.clk);
+         delay += 1; 
+       end 
+       end
+      begin 
+         wait(sintf.Mem_oprn_abort);
+      end
+    join_any
+    disable fork;
+    assert(sintf.Mem_oprn_abort)
+    else $fatal(" Checker:  Mem_oprn_abort not asserted");
+  endtask : check_MemOprnAbrt_assert
+  
+  //Task to wait till BusRdX is asserted
+  task check_singleBit_assert(input logic BIT );
+     delay = 0;
+    fork
+      begin 
+       while(delay <= Max_Resp_Delay) begin
+         @(posedge sintf.clk);
+         delay += 1; 
+       end 
+       end
+      begin 
+         wait(BIT);
+      end
+    join_any
+    disable fork;
+    assert(BIT)
+    else $fatal(" Checker:  Required Bit Field not asserted");
+  endtask : check_singleBit_assert
+  
+  //Task to wait till BusRdX is asserted
+  task check_bus_valid(input logic [31:0] BUS );
+     delay = 0;
+    fork
+      begin 
+       while(delay <= Max_Resp_Delay) begin
+         @(posedge sintf.clk);
+         delay += 1; 
+       end 
+       end
+      begin 
+         wait(BUS != 32'hz);
+      end
+    join_any
+    disable fork;
+    assert(BUS != 32'hz)
+    else $fatal(" Checker:  The BUS contains invalid value");
+  endtask : check_singleBit_assert
 endclass
+
+
 
 // A Simple Directed Testcase for Scenario 2,3,5,7 of Section 4.8.1: Read Miss with no copy available in other Caches. Verified at the top level
 class topReadMiss extends baseTestClass;
@@ -436,7 +536,7 @@ class topWriteMiss extends baseTestClass;
         end 
    endtask : testWriteMiss
 
-endclass
+endclass: topWriteMiss
 
 //A simple directed test for scenarios 12,14,16 in section 4.8.1. This will verify write Miss Operation with no free block available. Tests until block is written back into the Cache.
 class topWriteMissModifiedReplacement extends baseTestClass;
@@ -512,6 +612,66 @@ class topWriteMissModifiedReplacement extends baseTestClass;
       else $fatal(1,"TEST:  testWriteMissReplaceModified Checker:Mem_wr is not made high within timeout", $time);
     end 
    endtask : testWriteMissReplaceModified
+endclass : topWriteMissModifiedReplacement
+
+//simple Directed test to verify scenario 20 in section 4.8.1 in which DUT Cache snoops a BusRd  while it contains
+//the addressed block in shared/Modified/Exclusive state
+class topBusRdSnoop extends baseTestClass;
+    //use MESI_state as follows: 0 for Shared, 1 for Exclusive, 2 for Modified.
+	task testBusRdSnoop(virtual interface procMemCacheBusArbIntf sintf,input logic [1:0] MESI_state );
+		begin
+			//Other Cache raises Bus Rd signal
+			sintf.BusRd = 1;
+			
+			//Check if DUT Cache Requests for Snoop Access
+			check_ComBusReqSnoop_assert(sintf);
+			//if data is already in bus, then check if Bus Snoop request is deasserted
+			if(sintf.Data_in_Bus) begin
+			  check_ComBusReqSnoop_deassert(sintf);
+			end else begin
+			      
+			    //wait for grant
+			    wait(sintf.Com_Bus_Gnt_snoop);
+				//The Cache should raise mem operation abort
+				check_MemOprnAbrt_assert(sintf);
+				//block is in shared state
+				if(MESI_state == 0) begin
+					//Check if shared signal is made high
+					check_singleBit_assert(sintf.Shared);
+					//Check if Data bus com is loaded with data
+					check_bus_valid(sintf.Data_Bus_Com);
+					//Check if Data in Bus is made high
+					check_singleBit_assert(sintf.Data_in_Bus);
+					//Check if com bus req snoop is deasserted
+					check_ComBusReqSnoop_deassert(sintf);
+				end
+				else if(MESI_state == 1) begin //in Exclusive state
+                    //Check if shared signal is made high
+					check_singleBit_assert(sintf.Shared);
+					//Check if Data bus com is loaded with data
+					check_bus_valid(sintf.Data_Bus_Com);
+					//Check if Data in Bus is made high
+					check_singleBit_assert(sintf.Data_in_Bus);
+					//Check if com bus req snoop is deasserted
+					check_ComBusReqSnoop_deassert(sintf);
+				end 
+				else if(MESI_state == 2) begin //in Modified state
+				    //Check if Data bus com is loaded with data
+					check_bus_valid(sintf.Data_Bus_Com);
+					//Check if mem wr signal is asserted
+					check_singleBit_assert(sintf.Mem_wr);
+					//Raise Mem Wr Done
+					sintf.Mem_write_done = 1;
+					//Check if shared signal is made high
+					check_singleBit_assert(sintf.Shared);
+				end
+					
+			end
+				
+			
+			
+		end
+	endtask
 endclass
 module tb();
  reg Com_Bus_Req_proc;
