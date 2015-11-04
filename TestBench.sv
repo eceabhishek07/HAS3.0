@@ -54,6 +54,7 @@ interface AddrSegIntf;
 	logic [`INDEX_SIZE - 1 : 0]      Index_proc;
 	
 endinterface : AddrSegIntf
+
 //Task to contain stimulus and task to check correctness of Address Segregator Block
 class testAddrSeg;
 	rand reg [`ADDRESSSIZE - 1 : 0] Address;
@@ -66,7 +67,7 @@ class testAddrSeg;
 	//define Cover group to collect the addresses covered
 	covergroup cg_Address_testAddrSeg;
 	  coverpoint_Address : coverpoint Address {
-	  option.auto_bin_max = 8;
+	  option.auto_bin_max = 8;    //divide the range of possible addresses into 8 bins
 	  }
 	endgroup
 	
@@ -88,6 +89,7 @@ class testAddrSeg;
 	  
 	  //sample the coverage
 	  cg_Address_testAddrSeg.sample();
+	  
 	endtask : testAddr		
 endclass : testAddrSeg
 
