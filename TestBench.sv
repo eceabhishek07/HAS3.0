@@ -1,73 +1,12 @@
 //This document contains the Test Bench to verify Single Core L1 MESI Cache in a Multicore environment. Any References to section numbers in the comments have to be looked up in the verification plan submitted.
-
-
+//NOTE: All the signals to the DUT/Arbiter are accessed via an sv interface. When the DUT and Arbiter Designs are made available, 
+//they shall be connected to the interface. 
 `timescale 1ps/1ps
 
 //Define Address Size
 `define ADDRESSSIZE 32
 
-//Define the stimulus to the L1 Cache at Top level. 
-//This class contains all inputs to the DUT at Top level. To be used to generate random stimulus
-class singleCacheStimulus;
-  
-  //PrRd signal
-  rand bit PrRd;
- 
-  //PrWr signal
-  rand bit PrWr;
 
-  //Address 
-  rand reg [`ADDRESSSIZE-1:0] Address;
-
-  //Data Bus
-  rand reg [`ADDRESSSIZE-1:0] Data_Bus;  
-
-  //Shared
-  rand bit Shared;
-  
-  //Com_Bus_Gnt_proc
-  rand bit Com_Bus_Gnt_proc;
-
-  //Com_Bus_Gnt_snoop
-  rand bit Com_Bus_Gnt_snoop;
-
-  //All_Invalidation_done
-  rand bit All_Invalidation_done;
-
-  //Address_Com
-  rand reg [`ADDRESSSIZE-1:0] Address_Com;
-  
-  //Data_Bus_Com
-  rand reg [`ADDRESSSIZE-1:0] Data_Bus_Com;
-
-  //BusRd
-  rand bit BusRd;
-
-  //BusRdX
-  rand bit BusRdX;
-
-  //Invalidate
-  rand bit Invalidate;
-  
-  //Data_in_Bus
-  rand bit Data_in_Bus;
-  
-  //Mem_write_done
-  rand bit Mem_write_done;
-
-  function new();
-    //Initialize the fields in this constructor
-    this.PrRd             = 0;
-    this.PrWr             = 0;
-    this.Com_Bus_Gnt_proc = 0;
-    this.Data_Bus         = 32'hz;
-    this.Address_Com      = 32'hz;
-    this.Data_Bus_Com     = 32'hz;
-    this.Data_in_Bus      = 32'hz;
-     
-  endfunction
-
-endclass : singleCacheStimulus
 
 //Interface containing interfacing signals between (Proc and Cache), (Cache and Memory), (Memory and Arbiter), (Cache and Bus). To be used for Both DL and IL. 'Wr' related signals shall be ignored.
 interface procMemCacheBusArbIntf;
@@ -530,7 +469,7 @@ class topWriteMiss extends baseTestClass;
           //Lower Memory or Other Cache Loads Data on the Bus
           sintf.Data_in_Bus  = 1;
 
-          sintf.Data_Bus_Com = 32'hDEADBEEF;
+          sintf.Data_Bus_Com = 32'hCAFECAFE;
           
           check_ComBusReqproc_CPUStall_deaassert(sintf);
         end 
@@ -614,7 +553,34 @@ class topWriteMissModifiedReplacement extends baseTestClass;
    endtask : testWriteMissReplaceModified
 endclass : topWriteMissModifiedReplacement
 
-//simple Directed test to verify scenario 20 in section 4.8.1 in which DUT Cache snoops a BusRd  while it contains
+
+// A Simple Directed Testcase for Scenario 9 of Section 4.8.1 :Write Hit. Verified at the top level
+class topWriteHit extends baseTestClass;
+    //the second argument is the MESI state of the block that is hit. Use the following : 0 for shared state, 1 for exclusive state, 2 for modified state
+	task testSimpleWriteHit(virtual interface procMemCacheBusArbIntf sintf, input logic [1:0] MESI_state);
+		begin
+      
+			//Do a Write
+			sintf.Address = Address;
+			sintf.PrRd    = 0;
+			sintf.PrWr    = 1;
+			sintf.Data_Bus = 32'hFEEBFEEB;
+            if(MESI_state == 0 || MESI_state == 1) begin
+               check_singleBit_assert(sintf.Invalidate);
+            end
+            			
+      
+		//Check if CPU_stall and Com_Bus_Req_proc is deasserted
+		check_ComBusReqproc_CPUStall_deaassert(sintf);
+      
+       
+	end
+endtask : testSimpleWriteHit
+   
+
+endclass : topReadHit
+
+//Simple Directed test to verify scenario 20,21,22 in section 4.8.1 in which DUT Cache snoops a BusRd  while it contains
 //the addressed block in shared/Modified/Exclusive state
 class topBusRdSnoop extends baseTestClass;
     //use MESI_state as follows: 0 for Shared, 1 for Exclusive, 2 for Modified.
@@ -664,15 +630,67 @@ class topBusRdSnoop extends baseTestClass;
 					sintf.Mem_write_done = 1;
 					//Check if shared signal is made high
 					check_singleBit_assert(sintf.Shared);
-				end
-					
-			end
-				
-			
-			
+					//Check if Data in Bus made high
+					check_singleBit_assert(sintf.Data_in_Bus);
+					//Check if com bus req snoop is deasserted
+					check_ComBusReqSnoop_deassert(sintf);
+				end					
+			end					
 		end
 	endtask
-endclass
+endclass : topBusRdSnoop
+
+//Simple Directed test to verify scenario 23,24,25 in section 4.8.1 in which DUT Cache snoops a BusRdX  while it contains
+//the addressed block in shared/Modified/Exclusive state
+class topBusRdXSnoop extends baseTestClass;
+	//use MESI_state as follows: 0 for Shared, 1 for Exclusive, 2 for Modified.
+	task testBusRdXSnoop(virtual interface procMemCacheBusArbIntf sintf,input logic [1:0] MESI_state );
+		begin
+			//Other Cache raises Bus Rd signal
+			sintf.BusRd = 1;
+			
+			//Check if DUT Cache Requests for Snoop Access
+			check_ComBusReqSnoop_assert(sintf);
+			//if data is already in bus, then check if Bus Snoop request is deasserted
+			if(sintf.Data_in_Bus) begin
+				check_ComBusReqSnoop_deassert(sintf);
+			end else begin
+			      
+				//wait for grant
+				wait(sintf.Com_Bus_Gnt_snoop);
+				//The Cache should raise mem operation abort
+				check_MemOprnAbrt_assert(sintf);
+				//block is in shared state
+				if(MESI_state == 0) begin
+					//Check if shared signal is made high
+					check_singleBit_assert(sintf.Shared);
+					
+				end
+				else if(MESI_state == 1) begin //in Exclusive state
+					//Nothing done at top level. Only internal states are changed.
+					
+				end 
+				else if(MESI_state == 2) begin //in Modified state
+					//Check if Common Bus Access is requested
+					check_ComBusReqSnoop_assert(sintf);
+					//wait for access grant
+					wait(sintf.Com_Bus_Req_gnt);
+					//check if data bus com has valid data
+					check_bus_valid(sintf.Data_Bus_Com);
+					//check if mem wr is asserted
+					check_singleBit_assert(sintf.Mem_wr);
+					//raise the memory write done
+					sintf.Mem_write_done = 1;
+					//check if com bus req snoop is deasserted
+					sintf.check_ComBusReqSnoop_deassert(sintf);
+					
+				end
+					
+			end										
+		end
+	endtask
+endclass : topBusRdXSnoop
+
 module tb();
  reg Com_Bus_Req_proc;
  reg CPU_stall;
