@@ -1,13 +1,14 @@
 //This document contains the Test Bench to verify Single Core L1 MESI Cache in a Multicore environment. Any References to section numbers in the comments have to be looked up in the verification plan submitted.
 //NOTE: All the signals to the DUT/Arbiter are accessed via an sv interface. When the DUT and Arbiter Designs are made available, 
-//they shall be connected to the interface. 
+//they shall be connected to the interface.
+
+//Include defines.sv file containing all Macros
+`include "defines.sv"
 `timescale 1ps/1ps
 
 //Define Address Size
 `define ADDRESSSIZE 32
-
-
-
+`define BLK_OFFSET_SIZE 2
 //Interface containing interfacing signals between (Proc and Cache), (Cache and Memory), (Memory and Arbiter), (Cache and Bus). To be used for Both DL and IL. 'Wr' related signals shall be ignored.
 interface procMemCacheBusArbIntf;
   
@@ -42,6 +43,53 @@ interface procMemCacheBusArbIntf;
   logic                         Mem_req_snoop;
   logic                         Mem_gnt_snoop;
 endinterface
+//Define test classes for lowest blocks for low level verification discussed in section 4.8.2
+//For blocks inside Cache Controller
+//1. Define Address Segregator Interface
+interface AddrSegIntf;
+	
+	logic [`ADDRESSSIZE - 1 : 0]     Address;
+	logic [`BLK_OFFSET_SIZE - 1 : 0] Blk_offset_proc;
+	logic [`TAG_SIZE - 1 : 0]        Tag_proc;
+	logic [`INDEX_SIZE - 1 : 0]      Index_proc;
+	
+endinterface : AddrSegIntf
+//Task to contain stimulus and task to check correctness of Address Segregator Block
+class testAddrSeg;
+	rand reg [`ADDRESSSIZE - 1 : 0] Address;
+	constraint c_Address {Address inside {32'h00000000, 32'hffffffff};}
+	
+	reg[`BLK_OFFSET_SIZE - 1 : 0] Expected_Blk_offset_proc;
+	reg[`TAG_SIZE - 1 : 0]        Expected_Tag_proc;
+	reg[`INDEX_SIZE - 1 : 0]      Expected_Index_proc;
+	
+	//define Cover group to collect the addresses covered
+	covergroup cg_Address_testAddrSeg;
+	  coverpoint_Address : coverpoint Address {
+	  option.auto_bin_max = 8;
+	  }
+	endgroup
+	
+	function new();
+		cg_Address_testAddrSeg = new;
+	endfunction : new
+	
+	task testAddr(virtual interface AddrSegIntf asi);
+	  asi.Address = this.Address;
+	  Expected_Blk_offset_proc = this.Address[`BLK_OFFSET_SIZE - 1 : 0];
+	  Expected_Tag_proc        = this.Address[`TAG_MSB : `TAG_LSB];
+	  Expected_Index_proc      = this.Address[`INDEX_MSB : `INDEX_LSB];
+	  
+	  //Check for mismatch
+	  assert((asi.Blk_offset_proc == Expected_Blk_offset_proc) &&
+	         (asi.Tag_proc        == Expected_Tag_proc)        &&
+	         (asi.Index_proc      == Expected_Index_proc))
+	  else $fatal(1,"Address Segregator failure",$time);
+	  
+	  //sample the coverage
+	  cg_Address_testAddrSeg.sample();
+	endtask : testAddr		
+endclass : testAddrSeg
 
 //Define a base class that contains repeatedly used waiting tasks and fields.
 class baseTestClass;
@@ -287,8 +335,6 @@ class topReadMiss extends baseTestClass;
     // Check for behavior
     //Com_Bus_Req_proc and CPU_stall must be made high
      check_ComBusReqproc_CPUStall_assert(sintf); 
-    
-
   
     //Wait until arbiter grants access
     wait(sintf.Com_Bus_Gnt_proc == 1);
