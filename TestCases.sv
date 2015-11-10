@@ -7,11 +7,8 @@
 
 `timescale 1ps/1ps
 //Include defines.sv file containing all Macros
-`include "defines.sv"
+//`include "defines.sv"
 `include "interfaces.sv"
-
-//Define Address Size
-`define ADDRESSSIZE 32
 
 //enum type for MESI States
 typedef enum bit[1:0] {INVALID, SHARED, EXCLUSIVE, MODIFIED} mesiStateType;
@@ -20,12 +17,12 @@ typedef enum bit[1:0] {INVALID, SHARED, EXCLUSIVE, MODIFIED} mesiStateType;
 class baseTestClass;
   rand reg[`ADDRESSSIZE - 1 : 0] Address;
    
-   constraint c_Address { Address inside {32'h00000000,32'hffffffff};}
+   constraint c_Address { Address inside {[32'h00000000:32'hffffffff]};}
 
    //Delay until Cache Wrapper responds to any stimulus either from Proc or Arbiter or Memory. Measured in cycles of clk
    rand int Max_Resp_Delay;
 
-   constraint c_max_delay {Max_Resp_Delay inside {2,6};}
+   constraint c_max_delay {Max_Resp_Delay inside {[2:6]};}
    int delay;
    
    
@@ -45,8 +42,9 @@ class baseTestClass;
       join_any
       disable fork;
     //Check if Com_Bus_Req_proc is asserted  
-    assert(sintf.Com_Bus_Req_proc) $display("SUCCESS: sChecker: Com_Bus_Req_Proc is asserted within timeout after PrRd is asserted");
-    else $fatal(1,"TEST:  Checker: Com_Bus_Req_Proc is not asserted after PrRd", $time);
+    assert(sintf.Com_Bus_Req_proc) $display("SUCCESS: %m Checker: Com_Bus_Req_Proc is asserted within timeout after PrRd is asserted");
+    else $fatal(1,"%m TEST:  Checker: Com_Bus_Req_Proc is not asserted after PrRd", $time);
+    return;
    endtask : check_ComBusReqproc_CPUStall_assert
    
    //Task to wait and check for Com_Bus_Req_snoop to be asserted
@@ -108,8 +106,23 @@ class baseTestClass;
       assert(!sintf.CPU_stall && !sintf.Com_Bus_Req_proc) $display("SUCCESS: CPU_stall and Com_Bus_Req_proc are deasserted");
       else $fatal(1,"TEST: Checker:Either or both of CPU_stall and Com_Bus_Req_proc are not deasserted", $time);
    endtask : check_ComBusReqproc_CPUStall_deaassert
-
-
+ 
+    //Task to wait for Com Bus Gnt Proc to be asserted
+    virtual task check_ComBusGntproc_assert(virtual interface globalInterface sintf);
+    delay = 0;
+    fork
+      begin 
+       while(delay <= Max_Resp_Delay) begin
+         @(posedge sintf.clk);
+         delay += 1; 
+       end 
+      end
+      begin 
+         wait(sintf.Com_Bus_Gnt_proc);
+      end
+    join_any
+    disable fork;
+   endtask : check_ComBusGntproc_assert
    //Task to wait for BusRd is raised.
    virtual task check_BusRd_assert(virtual interface globalInterface sintf);
     delay = 0;
@@ -204,33 +217,111 @@ virtual  task check_CPU_stall_deassert(virtual interface globalInterface sintf);
     assert(sintf.Mem_oprn_abort)
     else $fatal(1," Checker:  Mem_oprn_abort not asserted",$time);
   endtask : check_MemOprnAbrt_assert
-  
-  //Task to wait till BusRdX is asserted
- virtual task check_singleBit_assert(input logic BIT, input logic clk );
-     delay = 0;
+ 
+// Check for Shared to be asserted
+virtual task check_Shared_assert(virtual interface globalInterface sintf);
+   delay = 0;
     fork
       begin 
        while(delay <= Max_Resp_Delay) begin
-         @(posedge clk);
+         @(posedge sintf.clk);
          delay += 1; 
        end 
        end
       begin 
-         wait(BIT);
+         wait(sintf.Shared);
       end
     join_any
     disable fork;
-    assert(BIT)
-    else $fatal(1," Checker:  Required Bit Field not asserted",$time);
+    assert(sintf.Shared)
+    else $fatal(1," Checker: Shared not asserted",$time);
+endtask : check_Shared_assert
+
+// Check for Invalidate to be asserted
+virtual task check_Invalidate_assert(virtual interface globalInterface sintf);
+   delay = 0;
+    fork
+      begin 
+       while(delay <= Max_Resp_Delay) begin
+         @(posedge sintf.clk);
+         delay += 1; 
+       end 
+       end
+      begin 
+         wait(sintf.Invalidate);
+      end
+    join_any
+    disable fork;
+    assert(sintf.Invalidate)
+    else $fatal(1," Checker:  Invalidate not asserted",$time);
+endtask : check_Invalidate_assert
+
+// Check for Mem_wr to be asserted
+virtual task check_MemWr_assert(virtual interface globalInterface sintf);
+   delay = 0;
+    fork
+      begin 
+       while(delay <= Max_Resp_Delay) begin
+         @(posedge sintf.clk);
+         delay += 1; 
+       end 
+       end
+      begin 
+         wait(sintf.Mem_wr);
+      end
+    join_any
+    disable fork;
+    assert(sintf.Mem_wr)
+    else $fatal(1," Checker:  Invalidate not asserted",$time);
+endtask : check_MemWr_assert
+
+// Check for Data in Bus to be asserted
+virtual task check_DataInBus_assert(virtual interface globalInterface sintf);
+   delay = 0;
+    fork
+      begin 
+       while(delay <= Max_Resp_Delay) begin
+         @(posedge sintf.clk);
+         delay += 1; 
+       end 
+       end
+      begin 
+         wait(sintf.Data_in_Bus);
+      end
+    join_any
+    disable fork;
+    assert(sintf.Invalidate)
+    else $fatal(1," Checker:  Data in Bus not asserted",$time);
+endtask : check_DataInBus_assert
+
+//Task to wait till Single Bit is asserted! Alas Not working...Must find a new strategy to make this work. For now it shall  be here!
+ virtual task check_singleBit_assert(input sbit, virtual interface
+globalInterface sintf  );
+     delay = 0;
+    fork
+      begin
+       while(delay <= Max_Resp_Delay) begin
+         @(posedge sintf.clk);
+         $display("delay = %d, Max_Resp_Delay = %d, BIT = %d", delay, Max_Resp_Delay, sbit);
+         delay += 1; 
+       end 
+       end
+      begin 
+         wait(sbit);
+      end
+    join_any
+    disable fork;
+    assert(sbit)
+    else $fatal(1," %m : Checker:  Required Bit Field not asserted",$time);
   endtask : check_singleBit_assert
   
-  //Task to wait till BusRdX is asserted
-  virtual task check_bus_valid(input logic [31:0] BUS, input logic clk );
+  //Task to wait till Bus is valid..same fate as above
+  virtual task check_bus_valid(input logic [31:0] BUS, virtual interface globalInterface sintf );
     delay = 0;
     fork
       begin 
        while(delay <= Max_Resp_Delay) begin
-         @(posedge clk);
+         @(posedge sintf.clk);
          delay += 1; 
        end 
        end
@@ -240,8 +331,29 @@ virtual  task check_CPU_stall_deassert(virtual interface globalInterface sintf);
     join_any
     disable fork;
     assert(BUS != 32'hz)
-    else $fatal(1," Checker:  The BUS contains invalid value",$time);
+    else $fatal(1," %m: Checker:  The BUS contains invalid value",$time);
   endtask : check_bus_valid
+
+ //Task to wait till DataBusCom is valid.
+  virtual task check_DataBusCom_valid(virtual interface globalInterface sintf );
+    delay = 0;
+    fork
+      begin 
+       while(delay <= Max_Resp_Delay) begin
+         @(posedge sintf.clk);
+         delay += 1; 
+       end 
+       end
+      begin 
+         wait(sintf.Data_Bus_Com != 32'hz);
+      end
+    join_any
+    disable fork;
+    assert(sintf.Data_Bus_Com != 32'hz)
+    else $fatal(1," %m: Checker:  The BUS contains invalid value",$time);
+  endtask : check_DataBusCom_valid
+
+
 
   //Task to check actual and expected next MESI states
   virtual task check_MESI_fsm(input mesiStateType actualMesiState, input
@@ -320,9 +432,10 @@ class topReadMiss extends baseTestClass;
     // Check for behavior
     //Com_Bus_Req_proc and CPU_stall must be made high
      check_ComBusReqproc_CPUStall_assert(sintf); 
-  
+    $display("Waiting for Com Bus Gnt Proc to be asserted...."); 
     //Wait until arbiter grants access
-    wait(sintf.Com_Bus_Gnt_proc == 1);
+     check_ComBusGntproc_assert(sintf);
+     //check_ComBusGntproc_assert(sintf);
     
     //Check if the Cache raises BusRd
     check_BusRd_assert(sintf);
@@ -334,8 +447,8 @@ class topReadMiss extends baseTestClass;
     check_Address_Com_load(sintf);
 
     //Main Memory requests for Bus Access. Wait for Bus Access Grant by the arbiter
-    sintf.Mem_req_snoop = 1;
-    wait(sintf.Mem_gnt_snoop == 1);
+    sintf.Mem_snoop_req = 1;
+    wait(sintf.Mem_snoop_gnt == 1);
  
     //Main Memory puts data on the Data_Bus_Com and raises Data_in_Bus
     sintf.Data_Bus_Com = 32'hBABABABA;
@@ -376,7 +489,7 @@ class topReadHit extends baseTestClass;
       disable fork;
       
       assert(sintf.Data_Bus != 32'hz) $display("SUCCESS: testSimpleReadHit Checker: Data_Bus is loaded with Cache data within timeout after PrRd is asserted");
-      else $fatal(1,"TEST:  testSimpleReadHit Checker: Data_Bus is loaded with Cache data within timeout after PrRd is asserted", $time);
+      else $fatal(1,"TEST:  testSimpleReadHit Checker: Data_Bus is not loaded with Cache data within timeout after PrRd is asserted", $time);
       
       //Check if CPU_stall and Com_Bus_Req_proc is deasserted
       check_ComBusReqproc_CPUStall_deaassert(sintf);
@@ -491,7 +604,7 @@ class topWriteMiss extends baseTestClass;
           //wait for CPU_stall and Com_Bus_Gnt_proc to be made high
           check_ComBusReqproc_CPUStall_assert(sintf);
 
-          wait(sintf.Com_Bus_Gnt_proc);
+          check_ComBusGntproc_assert(sintf);
 
           check_BusRdX_assert(sintf);
 
@@ -597,7 +710,7 @@ class topWriteHit extends baseTestClass;
 			sintf.PrWr    = 1;
 			sintf.Data_Bus = 32'hFEEBFEEB;
             if(MESI_state == 0 || MESI_state == 1) begin
-               check_singleBit_assert(sintf.Invalidate,sintf.clk);
+               check_Invalidate_assert(sintf);
             end
             			
       
@@ -634,35 +747,35 @@ class topBusRdSnoop extends baseTestClass;
 	 	//block is in shared state
 	 	if(MESI_state == 0) begin
 	 	  //Check if shared signal is made high
-	 	  check_singleBit_assert(sintf.Shared,sintf.clk);
+	 	  check_Shared_assert(sintf);
 	 	  //Check if Data bus com is loaded with data
-	 	  check_bus_valid(sintf.Data_Bus_Com,sintf.clk);
+	 	  check_DataBusCom_valid(sintf);
 	 	  //Check if Data in Bus is made high
-	 	  check_singleBit_assert(sintf.Data_in_Bus,sintf.clk);
+	 	  check_DataInBus_assert(sintf);
 	 	  //Check if com bus req snoop is deasserted
 	 	  check_ComBusReqSnoop_deassert(sintf);
 	 	end
 	 	else if(MESI_state == 1) begin //in Exclusive state
                   //Check if shared signal is made high
-	 	  check_singleBit_assert(sintf.Shared,sintf.clk);
+	 	  check_Shared_assert(sintf);
 	 	  //Check if Data bus com is loaded with data
-	 	  check_bus_valid(sintf.Data_Bus_Com,sintf.clk);
+	 	  check_DataBusCom_valid(sintf);
 	 	  //Check if Data in Bus is made high
-	 	  check_singleBit_assert(sintf.Data_in_Bus,sintf.clk);
+	 	  check_DataInBus_assert(sintf);
 	 	  //Check if com bus req snoop is deasserted
 	 	  check_ComBusReqSnoop_deassert(sintf);
 	 	end 
 	 	else if(MESI_state == 2) begin //in Modified state
 	 	  //Check if Data bus com is loaded with data
-	 	  check_bus_valid(sintf.Data_Bus_Com,sintf.clk);
+	 	  check_DataBusCom_valid(sintf);
 	 	  //Check if mem wr signal is asserted
-	 	  check_singleBit_assert(sintf.Mem_wr,sintf.clk);
+	 	  check_MemWr_assert(sintf);
 	 	  //Raise Mem Wr Done
 	 	  sintf.Mem_write_done = 1;
 	 	  //Check if shared signal is made high
-	 	  check_singleBit_assert(sintf.Shared,sintf.clk);
+	 	  check_Shared_assert(sintf);
 	 	  //Check if Data in Bus made high
-	 	  check_singleBit_assert(sintf.Data_in_Bus,sintf.clk);
+	 	  check_DataInBus_assert(sintf);
 	 	  //Check if com bus req snoop is deasserted
 	 	  check_ComBusReqSnoop_deassert(sintf);
 	 	end					
@@ -694,7 +807,7 @@ class topBusRdXSnoop extends baseTestClass;
 	   //block is in shared state
 	   if(MESI_state == 0) begin
 	   	//Check if shared signal is made high
-	   	check_singleBit_assert(sintf.Shared,sintf.clk);
+	   	check_Shared_assert(sintf);
 	   	
 	   end
 	   else if(MESI_state == 1) begin //in Exclusive state
@@ -707,9 +820,9 @@ class topBusRdXSnoop extends baseTestClass;
 	   	//wait for access grant
 	   	wait(sintf.Com_Bus_Gnt_snoop);
 	   	//check if data bus com has valid data
-	   	check_bus_valid(sintf.Data_Bus_Com,sintf.clk);
+	   	check_DataBusCom_valid(sintf);
 	   	//check if mem wr is asserted
-	   	check_singleBit_assert(sintf.Mem_wr,sintf.clk);
+	   	check_MemWr_assert(sintf);
 	   	//raise the memory write done
 	   	sintf.Mem_write_done = 1;
 	   	//check if com bus req snoop is deasserted
@@ -764,7 +877,7 @@ class unitMESIProc extends baseTestClass;
                        SHARED:    begin
                          check_MESI_fsm(mesiStateType'(cci.Updated_MESI_state_proc),MODIFIED,cci.clk);
                          //check if invalidate signal is asserted
-                         check_singleBit_assert(cci.Invalidate,cci.clk); 
+                         check_Invalidate_assert(cci); 
                        end
                    endcase
                  end
@@ -830,7 +943,7 @@ class unitMESISnoop extends baseTestClass;
                        SHARED:    begin
                          check_MESI_fsm(mesiStateType'(cci.Updated_MESI_state_snoop),MODIFIED,cci.clk);
                          //check if invalidate signal is asserted
-                         check_singleBit_assert(cci.Invalidate,cci.clk); 
+                         check_Invalidate_assert(cci); 
                        end
                    endcase
                  end
@@ -933,7 +1046,7 @@ endclass : unitPlruBlkReplace
 //Class to contain stimulus and task to check correctness of Address Segregator Block
 class testAddrSeg;
 	rand reg [`ADDRESSSIZE - 1 : 0] Address;
-	constraint c_Address {Address inside {32'h00000000, 32'hffffffff};}
+	constraint c_Address { Address inside {[32'h00000000 : 32'hffffffff]};}
 	
 	reg[`BLK_OFFSET_SIZE - 1 : 0] Expected_Blk_offset_proc;
 	reg[`TAG_SIZE - 1 : 0]        Expected_Tag_proc;
@@ -951,6 +1064,8 @@ class testAddrSeg;
 	endfunction : new
 	
 	task testAddr(virtual interface globalInterface asi);
+          asi.PrRd    = 1; 
+          asi.PrWr    = 0; 
 	  asi.Address = this.Address;
 	  Expected_Blk_offset_proc = this.Address[`BLK_OFFSET_SIZE - 1 : 0];
 	  Expected_Tag_proc        = this.Address[`TAG_MSB : `TAG_LSB];
@@ -960,7 +1075,7 @@ class testAddrSeg;
 	  //Check for mismatch
 	  assert((asi.Blk_offset_proc == Expected_Blk_offset_proc) &&
 	         (asi.Tag_proc        == Expected_Tag_proc)        &&
-	         (asi.Index_proc      == Expected_Index_proc))
+	         (asi.Index_proc      == Expected_Index_proc)) $display("TEST PASSED: Address Segregator Works Fine. testAddrSeg");
 	  else $fatal(1,"Address Segregator failure",$time);
 	  
 	  //sample the coverage
