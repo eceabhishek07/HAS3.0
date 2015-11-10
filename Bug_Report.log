@@ -1,0 +1,64 @@
+****** Bug Report for L1 MESI Cache in a Multicore Environment. Bus are presented in
+the order of testing.*****
+
+COMPILER USED: Cadence - NCVERILOG
+
+1. Testing for syntax errors:
+
+  a) cache_block_1.v :
+     Warnings like this show up when this file is compiled for indices 2 and 3.
+     " Access_blk_proc[2]   <= 1'b0;
+                      |
+ncelab: *W,BNDWRN (./cache_block_1.v,294|15): Bit-select or part-select index out of declared bounds [4.2.1(IEEE)]."
+
+FIX: ASSOCIATIVITY MACRO needs to be redefined to 2. It was originally 1 which
+makes the index out of bound.
+
+
+
+  b) cache_controller_1.v :
+     This Error occurs when compiled: 
+    " file: cache_controller_1.v
+end
+  |
+ncvlog: *E,ILLPRI (cache_controller_1.v,287|2): illegal expression primary [4.2(IEEE)].
+        module worklib.cache_controller_1:v
+                errors: 1, warnings: 0"
+
+FIX: 'endcase' has been commented out at line 286. Comment needs to be removed.
+
+  c) cache_wrapper_1.v :
+     This Error occurs when compiled :
+    " cache_controller_0 cc (         PrRd, 
+                    |
+ncelab: *E,CUVMUR (./cache_wrapper_1.v,91|20): instance 'cache_wrapper_1.cc' of design unit 'cache_controller_0' is unresolved in 'worklib.cache_wrapper_1:v'.
+ncverilog: *E,ELBERR: Error during elaboration (status 1), exiting."
+
+FIX: 'cache_controller_0' has to be changed to 'cache_controller_1'
+   
+  d) fifo.v :
+     This Error occurs when compiled :
+     "input Com_Bus_req_Gnt[0:7];
+                     |
+ncvlog: *E,EXPSMC (fifo.v,7|21): expecting a semicolon (';') [12.3.2(IEEE)].
+        module worklib.fifo:v
+                errors: 1, warnings: 0"
+    
+
+ FIX: define as follows: input [0:7] Com_Bus_req_Gnt;
+
+   e) arbiter.v
+      This error occurs when compiled:
+      "file: arbiter.v
+input                                   Com_Bus_Req_proc[7:0];
+                                                        |
+ncvlog: *E,EXPSMC (arbiter.v,32|27): expecting a semicolon (';') [12.3.2(IEEE)].
+input                                   Com_Bus_Req_snoop[3:0];
+                                                         |
+ncvlog: *E,EXPSMC (arbiter.v,33|28): expecting a semicolon (';') [12.3.2(IEEE)].
+        module worklib.arbiter:v
+                errors: 2, warnings: 0"
+
+ FIX: put [7:0] and [3:0] before the register identifier.
+
+       
