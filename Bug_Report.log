@@ -61,4 +61,19 @@ ncvlog: *E,EXPSMC (arbiter.v,33|28): expecting a semicolon (';') [12.3.2(IEEE)].
 
  FIX: put [7:0] and [3:0] before the register identifier.
 
+2) Read Miss Scenario:
+   Address loaded in the Address_Com Bus is not same as Address requested.
+   FIX:   Address_Com_reg 	= {Tag_proc, Index_proc, Blk_offset_proc} in
+cache_block_1.v . Third parameter was hard coded to 2'b00 earlier.
+
+
+
+
+
+
+
+
+
+
+
        
