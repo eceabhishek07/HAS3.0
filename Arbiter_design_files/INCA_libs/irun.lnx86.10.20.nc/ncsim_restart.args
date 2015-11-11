@@ -1,0 +1,23 @@
+//
+// File created by:  ncverilog
+// Do not modify this file
+//
+-MESSAGES
+-EMGRLOG
+ncverilog.log
+-XLSTIME
+1447093387
+-XLKEEP
+-XLMODE
+./INCA_libs/irun.lnx86.10.20.nc
+-RUNMODE
+-CDSLIB
+./INCA_libs/irun.lnx86.10.20.nc/cds.lib
+-HDLVAR
+./INCA_libs/irun.lnx86.10.20.nc/hdl.var
+-XLNAME
+ncverilog
+-XLVERSION
+"TOOL:	ncverilog	10.20-s073"
+-XLNAME
+./INCA_libs/irun.lnx86.10.20.nc/lin02-320cvlb.ece.tamu.edu_4916

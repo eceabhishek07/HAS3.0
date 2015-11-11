@@ -1,0 +1,33 @@
+ncverilog: 10.20-s073: (c) Copyright 1995-2011 Cadence Design Systems, Inc.
+TOOL:	ncverilog	10.20-s073: Started on Nov 09, 2015 at 12:23:07 CST
+ncverilog
+	arbiter.v
+Recompiling... reason: file './arbiter.v' is newer than expected.
+	expected: Mon Nov  9 12:19:22 2015
+	actual:   Mon Nov  9 12:23:04 2015
+file: arbiter.v
+	module worklib.arbiter:v
+		errors: 0, warnings: 0
+		Caching library 'worklib' ....... Done
+	Elaborating the design hierarchy:
+	Building instance overlay tables: .................... Done
+	Generating native compiled code:
+		worklib.arbiter:v <0x7f0fdbe9>
+			streams:   0, words:     0
+	Loading native compiled code:     .................... Done
+	Building instance specific data structures.
+	Design hierarchy summary:
+		             Instances  Unique
+		Modules:             2       2
+		Registers:          27      27
+		Scalar wires:       14       -
+		Always blocks:      18      18
+		Initial blocks:      1       1
+		Cont. assignments:   0      12
+	Writing initial simulation snapshot: worklib.arbiter:v
+Loading snapshot worklib.arbiter:v .................... Done
+ncsim> source /softwares/Linux/cadence/INCISIV102/tools/inca/files/ncsimrc
+ncsim> run
+ncsim: *W,RNQUIE: Simulation is complete.
+ncsim> exit
+TOOL:	ncverilog	10.20-s073: Exiting on Nov 09, 2015 at 12:23:09 CST  (total: 00:00:02)
