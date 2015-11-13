@@ -588,11 +588,8 @@ Shared 			= 1'b0;
 					Cache_var[{Index_proc,Blk_access_proc}][`CACHE_DATA_MSB:`CACHE_DATA_LSB] 	= Data_Bus_Com;
 					Cache_proc_contr[{Index_proc,Blk_access_proc}][`CACHE_MESI_MSB:`CACHE_MESI_LSB] = Updated_MESI_state_proc;
 					Cache_proc_contr[{Index_proc,Blk_access_proc}][`CACHE_TAG_MSB:`CACHE_TAG_LSB] 	= Tag_proc;
-					//BUG: Blk_accessed 									= Blk_access_proc;	// Block accessed is assigned
-					//FIX: 
-                                        Blk_accessed 									= Blk_access_proc;	// Block accessed is assigned
-                                        Block_Hit_proc   = 1'b1;
-		// 			Com_Bus_Req_proc								= 1'b0;			// Bus request is released
+					//Blk_accessed 									= Blk_access_proc;	// Block accessed is assigned
+		//			Com_Bus_Req_proc								= 1'b0;			// Bus request is released
 				end
 			end
 		end
