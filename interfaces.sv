@@ -81,14 +81,15 @@ interface globalInterface(input logic clk);
    logic [`CACHE_DATA_SIZE-1 : 0]    Cache_var	    [0 : `CACHE_DEPTH-1];
    logic [`CACHE_TAG_MESI_SIZE-1 : 0]Cache_proc_contr[0 : `CACHE_DEPTH-1];
    logic [1:0] Blk_access_proc;
+
    clocking ClkBlk @(posedge clk);
       output PrRd;
       output PrWr; 
       output Address;
       output Shared;
    endclocking
+
    logic failed;
-   logic [31:0] last_data_stored;
    initial
      failed = 0; 
  //Task to check if there is any undefined behavior

@@ -24,7 +24,7 @@ class baseTestClass;
    //Delay until Cache Wrapper responds to any stimulus either from Proc or Arbiter or Memory. Measured in cycles of clk
    rand int Max_Resp_Delay;
 
-   constraint c_max_delay {Max_Resp_Delay inside {[6:10]};}
+   constraint c_max_delay {Max_Resp_Delay inside {[6:50]};}
    int delay;
    
    
@@ -44,8 +44,8 @@ class baseTestClass;
       join_any
       disable fork;
     //Check if Com_Bus_Req_proc_0 is asserted  
-    assert(sintf.Com_Bus_Req_proc_0) $display("SUCCESS:: Com_Bus_Req_Proc and CPU_stall are asserted within timeout after PrRd is asserted");
-    else begin $display("BUG:: Com_Bus_Req_Proc or CPU_stall is not asserted after PrRd");
+    assert(sintf.Com_Bus_Req_proc_0) $display("SUCCESS:: Com_Bus_Req_Proc and CPU_stall are asserted within timeout after PrRd/PrWr is asserted");
+    else begin $display("BUG:: Com_Bus_Req_Proc or CPU_stall is not asserted after PrRd/PrWr");
       status = "FAILED";
     end
     return;
@@ -211,8 +211,8 @@ virtual task check_CPU_stall_deassert(virtual interface globalInterface sintf);
       end
     join_any
     disable fork;
-    assert(sintf.BusRdX)
-    else $warning(1," Checker: BusRdX  not asserted",$time);
+    assert(sintf.BusRdX) $display("SUCCESS:: BusRdX is asserted within timeout");
+    else $display("BUG:: BusRdX  not asserted within timeout");
   endtask : check_BusRdX_assert
   
   
@@ -384,7 +384,7 @@ mesiStateType expectedMesiState);
         break;
      end
      mst = mesiStateType'(sintf.Updated_MESI_state_proc);
-    assert(sintf.Updated_MESI_state_proc == expectedMesiState) $display("SUCCESS:: Next MESI State consistent with Expected MESI State");
+    assert(sintf.Updated_MESI_state_proc == expectedMesiState) $display("SUCCESS:: Next MESI State consistent with Expected MESI State: Expected = %s, Actual = %s",expectedMesiState.name(),mst.name());
     else begin $display("BUG:: Next MESI State does not match with expected next MESI state: Expected = %s, Actual = %s",expectedMesiState.name(),mst.name());
      status = "FAILED";
     end
@@ -393,32 +393,33 @@ mesiStateType expectedMesiState);
   //Task to check if Data Bus is set with valid data
   virtual task check_DataBus_valid(virtual interface globalInterface sintf,input [31:0] data );
     delay = 0;
-    while(sintf.Data_Bus != data && data!= 32'hz ) begin
+    while(sintf.Data_Bus != data || data=== 32'hz || sintf.Data_Bus === 32'hZ) begin
          delay += 1; 
          @(posedge sintf.clk);
          if(delay >= Max_Resp_Delay)
            break;
     end
-    assert(sintf.Data_Bus == data) $display("SUCCESS:: Correct data is placed by cache on Data Bus to the proc: Data Bus = %x, Data_Bus_Com = %x",sintf.Data_Bus,data);
-    else begin $display("BUG:: The BUS contains invalid value: Data Bus = %x, Data_Bus_Com = %x",sintf.Data_Bus,data);
+    assert(sintf.Data_Bus === data) $display("SUCCESS:: Correct data is placed by cache on Data_Bus to the proc: Data Bus = %x, Data_Bus_Com = %x",sintf.Data_Bus,data);
+    else begin $display("BUG:: The Data_Bus contains invalid value: Data_Bus = %x, Expected Data = %x",sintf.Data_Bus,data);
       status = "FAILED";
     end
   endtask : check_DataBus_valid
 
  //Task to check if Memory is loaded with correct data. Need to fix. Doesnot take correct data
- virtual task check_CacheVar_Data(ref virtual interface globalInterface sintf, input [31:0] data);
+ virtual task check_CacheVar_Data(virtual interface globalInterface sintf, input [31:0] data,input [31:0] Address);
+ reg [31:0] temp_data;   
     delay = 0;
-         
-      while(sintf.Cache_proc_contr[{sintf.Index_proc,sintf.Blk_access_proc}][`CACHE_MESI_MSB:`CACHE_MESI_LSB] == INVALID ||
-            sintf.Cache_proc_contr[{sintf.Index_proc,sintf.Blk_access_proc}][`CACHE_MESI_MSB:`CACHE_MESI_LSB] == 2'bxx) begin
+      while(sintf.Cache_var[{Address[`INDEX_MSB:`INDEX_LSB],2'b00}][`CACHE_DATA_MSB:`CACHE_DATA_LSB] != data ) begin
            delay += 1;
            if(delay >= Max_Resp_Delay) begin
               $display("WARNING:: Timeout for Data to be stored in the Cache");
+              break;
            end
            @(posedge sintf.clk);
       end
-    assert(sintf.Cache_var[{sintf.Index_proc,sintf.Blk_access_proc}][`CACHE_DATA_MSB:`CACHE_DATA_LSB] == data) $display("SUCCESS:: Data stored in Cache matches with Data placed on the bus:\n Stored Data = %x , Given Data = %x",sintf.Cache_var[{sintf.Index_proc,sintf.Blk_access_proc}][`CACHE_DATA_MSB:`CACHE_DATA_LSB],data);
-    else $display("WARNING Checker:  Incorrect data is stored in the Cache at time = %d:\n Stored Data = %x , Given Data = %x ",$time,sintf.Cache_var[{sintf.Index_proc,sintf.Blk_access_proc}][`CACHE_DATA_MSB:`CACHE_DATA_LSB], data);
+    temp_data = sintf.Cache_var[{Address[`INDEX_MSB:`INDEX_LSB],2'b00}][`CACHE_DATA_MSB:`CACHE_DATA_LSB];
+    assert(temp_data === data) $display("SUCCESS:: Data stored in Cache matches with Expected Data: Stored Data = %x , Expected Data = %x",temp_data,data);
+    else $display("BUG:: Incorrect data is stored in the Cache: Stored Data = %x , Expected Data = %x ",$time,temp_data, data);
  endtask :  check_CacheVar_Data
   //Task to reset signals after each operation
   virtual task reset_DUT_inputs(virtual interface globalInterface dif);
@@ -501,12 +502,13 @@ class topReadMiss extends baseTestClass;
     wait(sintf.Mem_snoop_gnt == 1);
     //Main Memory puts data on the Data_Bus_Com and raises Data_in_Bus
     sintf.Data_Bus_Com_reg = 32'hBABABABA;
-    sintf.last_data_stored = sintf.Data_Bus_Com_reg;
     sintf.Data_in_Bus_reg = 1;
     //Check if MESI State is properly assigned to block corresponding to the Address given
     check_MESI_fsm(sintf,EXCLUSIVE); 
+    //Check if Memory is loaded with Correct Data
+    check_CacheVar_Data(sintf,sintf.Data_Bus_Com_reg,Address); 
     //Check if Data_Bus is valid with the data
-    check_DataBus_valid(sintf,sintf.Data_Bus_Com_reg); 
+    check_DataBus_valid(sintf,sintf.Data_Bus_Com_reg);
     //Check if CPU_stall and Com_Bus_Req_proc is de-asserted on asserting Data_in_Bus
     check_CPU_stall_deassert(sintf);
     check_ComBusReqproc_CPUStall_deaassert(sintf);
@@ -519,14 +521,13 @@ endclass : topReadMiss
 class topReadHit extends baseTestClass;
    rand reg[31:0] last_data_stored;
    task testSimpleReadHit(virtual interface globalInterface sintf);
-    begin
       $display("\n****** Test topReadHit Started ****** "); 
       
       //Do a Read Hit
       sintf.ClkBlk.Address <= Address;
       sintf.ClkBlk.PrRd    <= 1;
       sintf.ClkBlk.PrWr    <= 0;
-
+      $display("Data to be checked against %x",last_data_stored);
       //Check if Data is placed on Data_Bus
       check_DataBus_valid(sintf,last_data_stored); 
       
@@ -534,7 +535,6 @@ class topReadHit extends baseTestClass;
       check_ComBusReqproc_CPUStall_deaassert(sintf);
       $display("****** Test topReadHit Done Status = %s ******\n",!sintf.failed?status:"FAILED"); 
        
-    end
    endtask : testSimpleReadHit
    
 
@@ -554,6 +554,8 @@ class topReadMissReplaceModified extends baseTestClass;
      constraint c_max_delay {Max_Resp_Delay inside {2,6};}
      int delay;
      task testReadMissReplaceModified(virtual interface globalInterface sintf);
+      
+      $display("\n****** Test topReadMissReplaceModified Started ****** "); 
           
       sintf.ClkBlk.Address <= Address;
       sintf.ClkBlk.PrRd    <= 1;
@@ -632,9 +634,10 @@ class topWriteMiss extends baseTestClass;
    
     //data to be written
    rand int wrData;
-   constraint c_wrData  {wrData inside {32'h00000000,32'hffffffff};}
+   constraint c_wrData  {wrData inside {[32'h00000000:32'hffffffff]};}
    task testWriteMiss(virtual interface globalInterface sintf);
         begin
+         $display("\n****** Test topWriteMiss Started ****** "); 
           sintf.ClkBlk.PrWr      <= 1; 
           sintf.ClkBlk.PrRd      <= 0;
           sintf.ClkBlk.Address   <= Address; 
@@ -652,9 +655,19 @@ class topWriteMiss extends baseTestClass;
           //Lower Memory or Other Cache Loads Data on the Bus
           sintf.Data_in_Bus_reg = 1;
 
-          sintf.Data_Bus_Com_reg = 32'hCAFECAFE;
+          sintf.Data_Bus_Com_reg = 32'hABACABAB;
+    
+          //Check if MESI State is properly assigned to block corresponding to the Address given
+          check_MESI_fsm(sintf,MODIFIED);
+
+          //Check if Data is correctly written into the cache
+          check_CacheVar_Data(sintf,wrData,Address); 
+          
+          //check_DataBus_valid(sintf,wrData); 
           
           check_ComBusReqproc_CPUStall_deaassert(sintf);
+          repeat(Max_Resp_Delay) @(posedge sintf.clk);
+          $display("****** Test topWriteMiss Done Status = %s ******\n",!sintf.failed?status:"FAILED"); 
         end 
    endtask : testWriteMiss
 

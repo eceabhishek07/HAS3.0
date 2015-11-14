@@ -16,23 +16,14 @@ module top_C1();
 
  //Global interface containing all the signals that need to be
  //driven/monitored
- globalInterface g_intf();
+ globalInterface g_intf(.clk(a.clk));
 
 
  //Virtual interface for global interface
  virtual interface globalInterface local_intf;
- //Wires to connect Arbiter and Cache Wrapper
- 
- assign g_intf.clk = a.clk;
- assign Data_Bus_Com = g_intf.PrRd || g_intf.PrWr ? g_intf.Data_Bus_Com : 32'hZ;
- assign Data_in_Bus  = g_intf.PrRd || g_intf.PrWr ? g_intf.Data_in_Bus  : 32'hZ;
- //Connect the inner blocks of CC/CB with the global interface
- always @* begin
-  foreach(P1_DL.cb.Cache_var[i]) begin
-  g_intf.Cache_var[i]                   = P1_DL.cb.Cache_var[i]; 
-  g_intf.Cache_proc_contr[i]            = P1_DL.cb.Cache_proc_contr[i];
- end
- end
+ //Connect internal registers of DUT to interface
+ assign g_intf.Cache_var = P1_DL.cb.Cache_var;
+ assign g_intf.Cache_proc_contr = P1_DL.cb.Cache_proc_contr;
  always @(g_intf.clk) begin
    g_intf.Updated_MESI_state_proc  = P1_DL.cb.Updated_MESI_state_proc; 
    g_intf.Blk_access_proc          = P1_DL.cb.Blk_access_proc; 
@@ -96,7 +87,10 @@ arbiter a (
 //Instantiate a Top level direct testcase object
 topReadMiss topReadMiss_inst;
 topReadHit  topReadHit_inst;
-
+topReadMissReplaceModified topReadMissReplaceModified_inst;
+topWriteMiss topWriteMiss_inst;
+reg[31:0] temp_addr;
+reg[31:0] temp_data;
 initial
  begin
    #20;
@@ -106,15 +100,25 @@ initial
    topReadMiss_inst = new();
    topReadMiss_inst.randomize() with {Address == 32'hdeadbeef &&
 Max_Resp_Delay == 10;};
+   temp_addr = topReadMiss_inst.Address;
    topReadMiss_inst.testSimpleReadMiss(local_intf);
+   temp_data = P1_DL.cb.Cache_var[{temp_addr[`INDEX_MSB: `INDEX_LSB],2'b00}][`CACHE_DATA_MSB: `CACHE_DATA_LSB];
    #10;
    topReadMiss_inst.reset_DUT_inputs(local_intf); 
    #100;
    topReadHit_inst = new();
    topReadHit_inst.randomize() with {Address == 32'hdeadbeef &&
-   Max_Resp_Delay == 10 &&
-   last_data_stored == local_intf.last_data_stored;};
+   Max_Resp_Delay == 30 &&
+   last_data_stored == temp_data;};
    topReadHit_inst.testSimpleReadHit(local_intf);
+   #100;
+   topReadHit_inst.reset_DUT_inputs(local_intf); 
+   #100;
+   topWriteMiss_inst = new();
+   topWriteMiss_inst.randomize() with {Address == 32'hbabecafe &&
+   Max_Resp_Delay == 10 &&
+   wrData         == 32'hcafecafe; };
+   topWriteMiss_inst.testWriteMiss(local_intf);
    #100;
    
     
