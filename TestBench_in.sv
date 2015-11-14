@@ -28,13 +28,16 @@ reg Com_Bus_Gnt_snoop_1;
 reg Com_Bus_Gnt_snoop_2;
 reg Com_Bus_Gnt_snoop_3;
 
-reg Com_Bus_Gnt_proc_1;
-reg Com_Bus_Gnt_proc_2;
-reg Com_Bus_Gnt_proc_3;
-reg Com_Bus_Gnt_proc_4;
-reg Com_Bus_Gnt_proc_5;
-reg Com_Bus_Gnt_proc_6;
-reg Com_Bus_Gnt_proc_7;
+wire Com_Bus_Req_proc;
+wire Com_Bus_Gnt_proc;
+wire Com_Bus_Gnt_proc_0;
+wire Com_Bus_Gnt_proc_1;
+wire Com_Bus_Gnt_proc_2;
+wire Com_Bus_Gnt_proc_3;
+wire Com_Bus_Gnt_proc_4;
+wire Com_Bus_Gnt_proc_5;
+wire Com_Bus_Gnt_proc_6;
+wire Com_Bus_Gnt_proc_7;
 
 //Define wires for inout ports
 wire [`ADDRESSSIZE - 1 : 0] Address_Com;
@@ -47,19 +50,28 @@ wire                        Data_in_Bus;
 //Instantiate the interface through which the Verification testbench and the
 //DUT connect
 globalInterface g_intf();
+//.Com_Bus_Req_snoop(Com_Bus_Req_snoop[0]),
+//                       .Address_Com(Address_Com),
+//                       .Data_Bus_Com(Data_Bus_Com),
+//                       .Data_Bus(Data_Bus),
+//                       .BusRd(BusRd),
+//                       .BusRdX(BusRdX),
+//                       .Invalidate(Invalidate),
 
-assign Com_Bus_Req_snoop[0] = g_intf.Com_Bus_Req_snoop;
-assign g_intf.Address_Com = Address_Com;
-assign g_intf.Data_Bus_Com = Data_Bus_Com;
-assign g_intf.Data_Bus = Data_Bus;
-assign g_intf.BusRd  = BusRd;
-assign g_intf.BusRdX = BusRdX;
-assign g_intf.Invalidate = Invalidate;
-assign g_intf.Data_in_Bus = Data_in_Bus;
-assign g_intf.Blk_offset_proc = P1_DL.cb.Blk_offset_proc;
-assign g_intf.Tag_proc        = P1_DL.cb.Tag_proc;
-assign g_intf.Index_proc      = P1_DL.cb.Index_proc;
- //Instantiate the local virtual interface which is passed to various tasks
+assign g_intf.Address_Com     =  g_intf.PrRd || g_intf.PrWr ?Address_Com : 32'hZ;
+assign g_intf.Data_Bus_Com    =  g_intf.PrWr ? Data_Bus_Com       : 32'hZ; 
+assign g_intf.Data_Bus        =  g_intf.PrRd ? Data_Bus           : 32'hZ;
+assign g_intf.BusRd           =  g_intf.PrRd ? BusRd              : 32'hZ;
+assign g_intf.BusRdX          =  g_intf.PrWr ? BusRdX             : 32'hZ;
+assign g_intf.Invalidate      =  g_intf.PrWr ? Invalidate         : 32'hZ;
+assign g_intf.Data_in_Bus     =  g_intf.PrWr ? Data_in_Bus        : 32'hZ;
+assign g_intf.Blk_offset_proc =  P1_DL.cb.Blk_offset_proc;
+assign g_intf.Tag_proc        =  P1_DL.cb.Tag_proc;
+assign g_intf.Index_proc      =  P1_DL.cb.Index_proc;
+assign g_intf.Com_Bus_Gnt_proc = Com_Bus_Gnt_proc;
+assign g_intf.Com_Bus_Req_proc = Com_Bus_Req_proc;
+ 
+//Instantiate the local virtual interface which is passed to various tasks
  //defined in test cases in TestCases.sv
 virtual interface globalInterface local_g_intf;
 
@@ -70,8 +82,8 @@ virtual interface globalInterface local_g_intf;
                             .Address(g_intf.Address),
                             .Data_Bus(Data_Bus),
                             .CPU_stall(g_intf.CPU_stall),
-                            .Com_Bus_Req_proc(g_intf.Com_Bus_Req_proc),
-                            .Com_Bus_Gnt_proc(g_intf.Com_Bus_Gnt_proc),
+                            .Com_Bus_Req_proc(Com_Bus_Req_proc),
+                            .Com_Bus_Gnt_proc(Com_Bus_Gnt_proc),
                             .Com_Bus_Req_snoop(g_intf.Com_Bus_Req_snoop),
                             .Com_Bus_Gnt_snoop(g_intf.Com_Bus_Gnt_snoop),
                             .Address_Com(Address_Com),
@@ -90,7 +102,7 @@ virtual interface globalInterface local_g_intf;
                            );
  
 //Connect Arbiter to the global interface as follows
-arbiter 		a1 		(       g_intf.Com_Bus_Req_proc,
+arbiter 		a1 		(       Com_Bus_Req_proc,
 						1'b0,
 						1'b0,
 						1'b0,
@@ -98,11 +110,11 @@ arbiter 		a1 		(       g_intf.Com_Bus_Req_proc,
 						1'b0,
 						1'b0,
 						1'b0,
-                                                Com_Bus_Req_snoop[0],
-						Com_Bus_Req_snoop[1],
-						Com_Bus_Req_snoop[2],
-						Com_Bus_Req_snoop[3],
-						g_intf.Com_Bus_Gnt_proc,
+                                                1'b0,
+						1'b0,
+						1'b0,
+						1'b0,
+						Com_Bus_Gnt_proc,
 					        Com_Bus_Gnt_proc_1,
 					        Com_Bus_Gnt_proc_2,
 					        Com_Bus_Gnt_proc_3,
@@ -188,26 +200,32 @@ topWriteMiss topWriteMiss_inst;
     #10;
     reset_DUT_inputs(local_g_intf);
     topReadMiss_inst = new();
-    topReadMiss_inst.randomize() with {Address == 32'hDEADBEEF;};
+    topReadMiss_inst.randomize() with {Address == 32'hdeadbeef;};
     topReadMiss_inst.testSimpleReadMiss(local_g_intf);
     $display("1) Test topReadMiss_inst done with Address %x ", g_intf.Address);
-   
+    // BUG 2 in Bug_Report.log is found with above test.
+    //Check if Data is Properly Stored
+    $display("Data at Address = %x is Data = %x",g_intf.Address, P1_DL.cb.Cache_var[{g_intf.Address[`INDEX_MSB: `INDEX_LSB],P1_DL.cb.Blk_access_proc}][`CACHE_DATA_MSB:`CACHE_DATA_LSB]);
+ 
  //2)Test Write Miss
-    reset_DUT_inputs(local_g_intf);
-   $display("2) Trying to Write to an address....");
-    topWriteMiss_inst = new();
-    topWriteMiss_inst.randomize() with {Address == 32'h00000000;};
-    topWriteMiss_inst.testWriteMiss(local_g_intf);
-   $display("Write Complete to address %x", g_intf.Address);
-   $display("Trying to Read from the same address %x",g_intf.Address);
-    
-    topReadHit_inst = new();
-    topReadHit_inst.randomize() with {Address == 32'h00000000;};
-    
-    topReadHit_inst.testSimpleReadHit(local_g_intf);
-    $display("Test topReadHit_inst with Address %x ", g_intf.Address);
-    #100;
-    $finish; 
+ //   reset_DUT_inputs(local_g_intf);
+ //  $display("2) Trying to Write to an address....");
+ //   topWriteMiss_inst = new();
+ //   topWriteMiss_inst.randomize() with {Address == 32'h00000000;};
+ //   topWriteMiss_inst.testWriteMiss(local_g_intf);
+ //  $display("Write Complete to address %x", g_intf.Address);
+ //  $display("Trying to Read from the same address %x",g_intf.Address);
+ //
+ //Set the environment for read hit
+ //   reset_DUT_inputs(local_g_intf);
+ //   #10; 
+ //   topReadHit_inst = new();
+ //   topReadHit_inst.randomize() with {Address == 32'hDEADBEEF;};
+ //   
+ //   topReadHit_inst.testSimpleReadHit(local_g_intf);
+ //   $display("Test topReadHit_inst with Address %x ", g_intf.Address);
+ //   #100;
+ //   $finish; 
 
  //Repeat the above procedure for all other test cases when the design is
  //finally released.

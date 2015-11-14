@@ -8,6 +8,7 @@
 `include "cache_wrapper_1.v"
 `include "arbiter.v"
 `include "TestCases.sv"
+
 //define half clock period
 `define HALF_PERIOD 100
 
@@ -20,17 +21,18 @@ module top_C1();
 
 
  //Virtual interface for global interface
- virtual interface globalInterface local_intf;
- //Wires to connect Arbiter and Cache Wrapper
- 
+
  assign g_intf.clk = a.clk;
- assign Data_Bus_Com = g_intf.PrRd || g_intf.PrWr ? g_intf.Data_Bus_Com : 32'hZ;
- assign Data_in_Bus  = g_intf.PrRd || g_intf.PrWr ? g_intf.Data_in_Bus  : 32'hZ;
- //Connect the inner blocks of CC/CB with the global interface
- assign g_intf.Cache_var                = P1_DL.cb.Cache_var; 
- assign g_intf.Cache_proc_contr         = P1_DL.cb.Cache_proc_contr;
- assign g_intf.Updated_MESI_state_proc  = P1_DL.cb.Updated_MESI_state_proc; 
- assign g_intf.Blk_access_proc          = P1_DL.cb.Blk_access_proc; 
+ 
+ bind cache_wrapper_1: P1_DL globalInterface g_intf();
+ virtual interface globalInterface local_intf;
+ //assign Data_Bus_Com = g_intf.PrRd || g_intf.PrWr ? g_intf.Data_Bus_Com : 32'hZ;
+ //assign Data_in_Bus  = g_intf.PrRd || g_intf.PrWr ? g_intf.Data_in_Bus  : 32'hZ;
+ ////Connect the inner blocks of CC/CB with the global interface
+ //assign g_intf.Cache_var        = P1_DL.cb.Cache_var; 
+ //assign g_intf.Cache_proc_contr = P1_DL.cb.Cache_proc_contr;
+ //assign g_intf.Updated_MESI_state_proc = P1_DL.cb.Updated_MESI_state_proc; 
+  
 cache_wrapper_1 P1_DL (
                         g_intf.clk,
                         g_intf.PrWr,
@@ -93,22 +95,22 @@ topReadHit  topReadHit_inst;
 
 initial
  begin
-   #20;
-   $display("Testing Read Miss Scenario using topReadMiss test case");
    local_intf       = g_intf;
+   $display("Testing Read Miss Scenario using topReadMiss test case");
 // top read miss
    topReadMiss_inst = new();
    topReadMiss_inst.randomize() with {Address == 32'hdeadbeef;};
    topReadMiss_inst.testSimpleReadMiss(local_intf);
    $display("1) Test topReadMiss_inst done with Address %x ", g_intf.Address);
-   $display("TB: Data in cache is %x, at time = %d",local_intf.Cache_var[{local_intf.Address[`INDEX_MSB: `INDEX_LSB],local_intf.Blk_access_proc}][`CACHE_DATA_MSB:`CACHE_DATA_LSB],$time);
+   #100;
+   $display("Data in cache is %x,",g_intf.Cache_var[{g_intf.Address[`INDEX_MSB: `INDEX_LSB],P1_DL.cb.Blk_access_proc}][`CACHE_DATA_MSB:`CACHE_DATA_LSB]);
    #2;
-   $display("TB:Updated_MESI_state_proc = %d at time = %d",g_intf.Updated_MESI_state_proc,$time);
-   
+   $display("Updated_MESI_state_proc = %d at time = %d",g_intf.Updated_MESI_state_proc,$time);
+   $display("Updated_MESI_state_proc from Cache_proc_contr = %d at time = %d",g_intf.Cache_proc_contr[{g_intf.Index_proc,g_intf.Blk_access_proc}][`CACHE_MESI_MSB:`CACHE_MESI_LSB],$time);
    #100;
    topReadMiss_inst.reset_DUT_inputs(local_intf);
    #100;
-   $finish;
+  
     //top read hit
 //   local_intf       = g_intf;
 //   topReadHit_inst = new();
@@ -122,11 +124,10 @@ initial
 //   #100; 
 //   $finish;   
  end 
-
-//always @(posedge g_intf.clk)begin 
-//   //$display("Blk_accessed_proc is from g_intf = %d, from cb = %d",g_intf.Blk_access_proc,P1_DL.cb.Blk_access_proc);
-// end
-//always @(posedge g_intf.clk) begin
-//   //$display("Updated MESI State Proc is %x at time = %d",P1_DL.cb.Updated_MESI_state_proc, $time);
-//end
+initial begin
+  wait(g_intf.PrRd);
+  #10;
+  wait(g_intf.PrRd);
+  #100;
+end
 endmodule

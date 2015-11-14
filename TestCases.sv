@@ -15,6 +15,10 @@ typedef enum bit[1:0] {INVALID, SHARED, EXCLUSIVE, MODIFIED} mesiStateType;
 
 //Define a base class that contains repeatedly used waiting tasks and fields.
 class baseTestClass;
+   
+  
+  
+  
   rand reg[`ADDRESSSIZE - 1 : 0] Address;
    
    constraint c_Address { Address inside {[32'h00000000:32'hffffffff]};}
@@ -22,7 +26,7 @@ class baseTestClass;
    //Delay until Cache Wrapper responds to any stimulus either from Proc or Arbiter or Memory. Measured in cycles of clk
    rand int Max_Resp_Delay;
 
-   constraint c_max_delay {Max_Resp_Delay inside {[2:6]};}
+   constraint c_max_delay {Max_Resp_Delay inside {[6:10]};}
    int delay;
    
    
@@ -122,6 +126,7 @@ class baseTestClass;
       end
     join_any
     disable fork;
+    return;
    endtask : check_ComBusGntproc_assert
    //Task to wait for BusRd is raised.
    virtual task check_BusRd_assert(virtual interface globalInterface sintf);
@@ -137,7 +142,9 @@ class baseTestClass;
          wait(sintf.BusRd);
       end
     join_any
+    assert(sintf.BusRd) $display("SUCCESS: BusRd Asserted Properly ");
     disable fork;
+    return;
    endtask : check_BusRd_assert
    
   //Task to wait till address placed by cache on Address_Com bus
@@ -157,8 +164,9 @@ class baseTestClass;
     disable fork;
     
     assert(sintf.Address[31:2] == sintf.Address_Com[31:2] &&
-           sintf.Address[1:0] == sintf.Address_Com[1:0]) 
+           sintf.Address_Com[1:0] == 0) $display("SUCCESS: Correct Address is placed on Address_Com Bus"); 
     else $warning(1," Checker: Address is either not placed on Address_Com bus or wrong address is placed",$time);
+    return;
   endtask : check_Address_Com_load
 
   //Task to wait till CPU_stall is de-asserted
@@ -357,23 +365,25 @@ globalInterface sintf  );
 
 
   //Task to check actual and expected next MESI states
-  virtual task check_MESI_fsm(input mesiStateType actualMesiState, input
-mesiStateType expectedMesiState, input logic clk);
+    virtual task check_MESI_fsm(virtual interface globalInterface sintf, input
+mesiStateType expectedMesiState);
+    mesiStateType mst;
     delay = 0;
     fork
       begin 
        while(delay <= Max_Resp_Delay) begin
-         @(posedge clk);
+         @(posedge sintf.clk);
          delay += 1; 
        end 
        end
       begin 
-         wait(actualMesiState == expectedMesiState);
+         wait(sintf.Cache_proc_contr[{sintf.Index_proc,sintf.Blk_access_proc}][`CACHE_MESI_MSB:`CACHE_MESI_LSB] == expectedMesiState);
       end
     join_any
     disable fork;
-    assert(actualMesiState == expectedMesiState)
-    else $warning(1," Next MESI State does not match with expected next MESI state",$time);
+     mst = sintf.Cache_proc_contr[{sintf.Index_proc,sintf.Blk_access_proc}][`CACHE_MESI_MSB:`CACHE_MESI_LSB];
+    assert(sintf.Cache_proc_contr[{sintf.Index_proc,sintf.Blk_access_proc}][`CACHE_MESI_MSB:`CACHE_MESI_LSB] == expectedMesiState)
+    else $display("WARNING:: Next MESI State does not match with expected next MESI state: Expected = %s, Actual = %s at time = %d",expectedMesiState.name(),mst.name(),$time);
   endtask : check_MESI_fsm
 
   //Task to check if Data Bus is set with valid data
@@ -394,7 +404,26 @@ mesiStateType expectedMesiState, input logic clk);
     assert(sintf.Data_Bus != 32'hz)
     else $warning(1," %m: Checker:  The BUS contains invalid value",$time);
   endtask : check_DataBus_valid
- 
+
+ //Task to check if Memory is loaded with correct data
+ virtual task check_CacheVar_Data(virtual interface globalInterface sintf, input [31:0] data);
+    delay = 0;
+    fork
+      begin 
+       while(delay <= Max_Resp_Delay) begin
+         @(posedge sintf.clk);
+         delay += 1; 
+       end 
+       end
+      begin 
+         wait(sintf.Cache_proc_contr[{sintf.Index_proc,sintf.Blk_access_proc}][`CACHE_MESI_MSB:`CACHE_MESI_LSB] != INVALID);
+      end
+    join_any
+    disable fork;
+    $display("SVDEBUG:: Blk_access_proc inside testcase is %d",sintf.Blk_access_proc);
+    assert(sintf.Cache_var[{sintf.Index_proc,sintf.Blk_access_proc}][`CACHE_DATA_MSB:`CACHE_DATA_LSB] == data) $display("SUCCESS: Data stored in Cache matches with Data placed on the bus:\n Stored Data = %x , Given Data = %x",sintf.Cache_var[{sintf.Index_proc,sintf.Blk_access_proc}][`CACHE_DATA_MSB:`CACHE_DATA_LSB],data);
+    else $display("WARNING Checker:  Incorrect data is stored in the Cache at time = %d:\n Stored Data = %x , Given Data = %x ",$time,sintf.Cache_var[{sintf.Index_proc,sintf.Blk_access_proc}][`CACHE_DATA_MSB:`CACHE_DATA_LSB], data);
+ endtask :  check_CacheVar_Data
   //Task to reset signals after each operation
   virtual task reset_DUT_inputs(virtual interface globalInterface dif);
 
@@ -442,10 +471,11 @@ endclass
 //Test cases to verify top level functionality specified in section 4.8.1.
 // A Simple Directed Testcase for Scenario 2,3,5,7 of Section 4.8.1: Read Miss with no copy available in other Caches. Verified at the top level
 class topReadMiss extends baseTestClass;
-   
+  
+     
+
 //   Creates the simple Read stimulus and drives it to the DUT and checks for the behavior. Take the single Top Level Cache interface as input.
-   task testSimpleReadMiss(virtual interface globalInterface sintf);
-    begin
+   task testSimpleReadMiss(virtual globalInterface sintf);
      
      sintf.PrRd = 1;
      sintf.PrWr = 0;
@@ -453,8 +483,8 @@ class topReadMiss extends baseTestClass;
       
     // Check for behavior
     //Com_Bus_Req_proc_0 and CPU_stall must be made high
-     check_ComBusReqproc_CPUStall_assert(sintf); 
-    $display("Waiting for Com Bus Gnt Proc to be asserted...."); 
+     check_ComBusReqproc_CPUStall_assert(sintf);
+     $display("SUCCESS:  Com Bus Proc and CPU Stall are asserted"); 
     //Wait until arbiter grants access
      check_ComBusGntproc_assert(sintf);
      //check_ComBusGntproc_assert(sintf);
@@ -462,25 +492,28 @@ class topReadMiss extends baseTestClass;
     //Check if the Cache raises BusRd
     check_BusRd_assert(sintf);
     
-    assert(sintf.BusRd)
-    else $warning(1,"TEST: testSimpleReadMiss Checker: BusRd is not asserted after Com_Bus_Gnt_proc asserted ", $time);
-
+     //Snoop side activity
+     sintf.Shared        = 0;
+   
     //Wait until cache places Address in Address_Com bus
     check_Address_Com_load(sintf);
-
+    
     //Main Memory requests for Bus Access. Wait for Bus Access Grant by the arbiter
     sintf.Mem_snoop_req = 1;
     wait(sintf.Mem_snoop_gnt == 1);
- 
     //Main Memory puts data on the Data_Bus_Com and raises Data_in_Bus
     sintf.Data_Bus_Com_reg = 32'hBABABABA;
     sintf.Data_in_Bus_reg = 1;
-    
-    //Check if Data_Bus is valid with the data
-    check_DataBus_valid(sintf); 
-    //Check if CPU_stall is de-asserted on asserting Data_in_Bus
-    check_CPU_stall_deassert(sintf); 
+    repeat(10*Max_Resp_Delay)begin @(posedge sintf.clk);
     end
+    //Check if Memory Is loaded with correct data
+    check_CacheVar_Data(sintf,32'hBABABABA);
+    //Check if MESI State is properly assigned to block corresponding to the Address given
+    //check_MESI_fsm(sintf,EXCLUSIVE); 
+    //Check if CPU_stall is de-asserted on asserting Data_in_Bus
+    //Check if Data_Bus is valid with the data
+    //check_DataBus_valid(sintf); 
+    //icheck_CPU_stall_deassert(sintf); 
    endtask : testSimpleReadMiss
 endclass : topReadMiss
 
@@ -892,20 +925,20 @@ class unitMESIProc extends baseTestClass;
                    cci.Data_Bus_reg = 32'habababab;
                    case(cci.Current_MESI_state_proc)
                        MODIFIED:  begin
-                         check_MESI_fsm(mesiStateType'(cci.Updated_MESI_state_proc),MODIFIED,cci.clk); 
+                         check_MESI_fsm(cci,MODIFIED); 
                        end
                        EXCLUSIVE: begin
-                         check_MESI_fsm(mesiStateType'(cci.Updated_MESI_state_proc),MODIFIED,cci.clk); 
+                         check_MESI_fsm(cci,MODIFIED); 
                        end
                        SHARED:    begin
-                         check_MESI_fsm(mesiStateType'(cci.Updated_MESI_state_proc),MODIFIED,cci.clk);
+                         check_MESI_fsm(cci,MODIFIED);
                          //check if invalidate signal is asserted
                          check_Invalidate_assert(cci); 
                        end
                    endcase
                  end
            1'b0: begin
-                       check_MESI_fsm(mesiStateType'(cci.Updated_MESI_state_proc),mesiStateType'(cci.Current_MESI_state_proc),cci.clk); 
+                       check_MESI_fsm(cci,mesiStateType'(cci.Current_MESI_state_proc)); 
                  end
         endcase
         //store the next mesi state
@@ -958,20 +991,20 @@ class unitMESISnoop extends baseTestClass;
            1'b1: begin
                    case(cci.Current_MESI_state_snoop)
                        MODIFIED:  begin
-                         check_MESI_fsm(mesiStateType'(cci.Updated_MESI_state_snoop),INVALID,cci.clk); 
+                         check_MESI_fsm(cci,INVALID); 
                        end
                        EXCLUSIVE: begin
-                         check_MESI_fsm(mesiStateType'(cci.Updated_MESI_state_snoop),MODIFIED,cci.clk); 
+                         check_MESI_fsm(cci,MODIFIED); 
                        end
                        SHARED:    begin
-                         check_MESI_fsm(mesiStateType'(cci.Updated_MESI_state_snoop),MODIFIED,cci.clk);
+                         check_MESI_fsm(cci,MODIFIED);
                          //check if invalidate signal is asserted
                          check_Invalidate_assert(cci); 
                        end
                    endcase
                  end
            1'b0: begin
-                       check_MESI_fsm(mesiStateType'(cci.Updated_MESI_state_snoop),mesiStateType'(cci.Current_MESI_state_snoop),cci.clk); 
+                       check_MESI_fsm(cci,mesiStateType'(cci.Current_MESI_state_snoop)); 
                  end
         endcase
         //sample for coverage

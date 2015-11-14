@@ -77,7 +77,10 @@ interface globalInterface();
    logic [`BLK_OFFSET_SIZE - 1 : 0] Blk_offset_proc;
    logic [`TAG_SIZE - 1 : 0]        Tag_proc;
    logic [`INDEX_SIZE - 1 : 0]      Index_proc; 
+   logic [`CACHE_DATA_SIZE-1 : 0]    Cache_var	    [0 : `CACHE_DEPTH-1];
+   logic [`CACHE_TAG_MESI_SIZE-1 : 0]Cache_proc_contr[0 : `CACHE_DEPTH-1];
+   logic [1:0] Blk_access_proc;
   
- // modport cache_wrapper (input clk,  PrWr, PrRd, Address,logic Data_Bus, output CPU_stall, Com_Bus_Req_proc, input Com_Bus_Gnt_proc, output Com_Bus_Req_snoop , input Com_Bus_Gnt_snoop, logic Address_Com, logic  Data_Bus_Com, logic BusRd, BusRdX, Invalidate, Data_in_Bus, output Mem_wr, Mem_oprn_abort, input Mem_write_done, output Invalidation_done, input All_Invalidation_done, output Shared_local, input Shared); 
+ 
 endinterface : globalInterface
 
