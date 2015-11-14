@@ -1,15 +1,16 @@
 //This document contains interfaces to various blocks in the DUT specified in Cache.
 // Names of the interfaces are similar to the names of the blocks used in HAS3.0. Wherever there is deviation, explanation is provided.
-
 //Interface containing interfacing signals between (Proc and Cache), (Cache and Memory), (Memory and Arbiter), (Cache and Bus).
-// To be used for Both DL and IL. For IL 'Wr' related signals shall be ignored.Contains interfaces of internal blocks too. 
-interface globalInterface();
+// To be used for Both DL and IL. For IL 'Wr' related signals shall be ignored.Contains interfaces of internal blocks too.
+
+
+
+interface globalInterface(input logic clk);
   //Most of the fields defined are common to cache_controller, cache_block, cache_wrapper
-   logic 			clk;
   //Interface between Proc and Cache
-   logic 			PrRd; 
-   logic 			PrWr;
-   logic [`ADDRESSSIZE-1 : 0]	Address;
+   wire 			PrRd; 
+   wire 			PrWr;
+   wire [`ADDRESSSIZE-1 : 0]	Address;
    logic			CPU_stall; 
   //Interface between Proc and Arbiter                     
    wire 			Com_Bus_Gnt_proc_0;
@@ -23,7 +24,7 @@ interface globalInterface();
    wire 			Com_Bus_Gnt_snoop;
   //Interface between Cache and Bus
    logic 			All_Invalidation_done;
-   logic 			Shared;
+   wire 			Shared;
    wire         		BusRd;
    reg          		BusRd_reg;
    wire 		        BusRdX;
@@ -80,7 +81,34 @@ interface globalInterface();
    logic [`CACHE_DATA_SIZE-1 : 0]    Cache_var	    [0 : `CACHE_DEPTH-1];
    logic [`CACHE_TAG_MESI_SIZE-1 : 0]Cache_proc_contr[0 : `CACHE_DEPTH-1];
    logic [1:0] Blk_access_proc;
-  
- 
-endinterface : globalInterface
+   clocking ClkBlk @(posedge clk);
+      output PrRd;
+      output PrWr; 
+      output Address;
+      output Shared;
+   endclocking
+   logic failed;
+   logic [31:0] last_data_stored;
+   initial
+     failed = 0; 
+ //Task to check if there is any undefined behavior
+  task check_UndefinedBehavior();
+     if(PrRd)       begin
+         if(Com_Bus_Req_snoop_0) begin
+            $display("BUG:: Com_Bus_Req_Snoop is asserted while it should remain de-asserted\n");
+            failed = 1;
+         end
+     end 
+     else if(PrWr)  begin
+         if(Com_Bus_Req_snoop_0) begin
+            $display("BUG:: Com_Bus_Req_Snoop is asserted while it should remain de-asserted");
+            failed = 1;
+         end
+     end
+     else if(BusRd) begin
+     end
+     else if(BusRdX) begin
+     end
+  endtask : check_UndefinedBehavior  
+endinterface 
 

@@ -27,10 +27,16 @@ module top_C1();
  assign Data_Bus_Com = g_intf.PrRd || g_intf.PrWr ? g_intf.Data_Bus_Com : 32'hZ;
  assign Data_in_Bus  = g_intf.PrRd || g_intf.PrWr ? g_intf.Data_in_Bus  : 32'hZ;
  //Connect the inner blocks of CC/CB with the global interface
- assign g_intf.Cache_var                = P1_DL.cb.Cache_var; 
- assign g_intf.Cache_proc_contr         = P1_DL.cb.Cache_proc_contr;
- assign g_intf.Updated_MESI_state_proc  = P1_DL.cb.Updated_MESI_state_proc; 
- assign g_intf.Blk_access_proc          = P1_DL.cb.Blk_access_proc; 
+ always @* begin
+  foreach(P1_DL.cb.Cache_var[i]) begin
+  g_intf.Cache_var[i]                   = P1_DL.cb.Cache_var[i]; 
+  g_intf.Cache_proc_contr[i]            = P1_DL.cb.Cache_proc_contr[i];
+ end
+ end
+ always @(g_intf.clk) begin
+   g_intf.Updated_MESI_state_proc  = P1_DL.cb.Updated_MESI_state_proc; 
+   g_intf.Blk_access_proc          = P1_DL.cb.Blk_access_proc; 
+ end
 cache_wrapper_1 P1_DL (
                         g_intf.clk,
                         g_intf.PrWr,
@@ -98,35 +104,24 @@ initial
    local_intf       = g_intf;
 // top read miss
    topReadMiss_inst = new();
-   topReadMiss_inst.randomize() with {Address == 32'hdeadbeef;};
+   topReadMiss_inst.randomize() with {Address == 32'hdeadbeef &&
+Max_Resp_Delay == 10;};
    topReadMiss_inst.testSimpleReadMiss(local_intf);
-   $display("1) Test topReadMiss_inst done with Address %x ", g_intf.Address);
-   $display("TB: Data in cache is %x, at time = %d",local_intf.Cache_var[{local_intf.Address[`INDEX_MSB: `INDEX_LSB],local_intf.Blk_access_proc}][`CACHE_DATA_MSB:`CACHE_DATA_LSB],$time);
-   #2;
-   $display("TB:Updated_MESI_state_proc = %d at time = %d",g_intf.Updated_MESI_state_proc,$time);
+   #10;
+   topReadMiss_inst.reset_DUT_inputs(local_intf); 
+   #100;
+   topReadHit_inst = new();
+   topReadHit_inst.randomize() with {Address == 32'hdeadbeef &&
+   Max_Resp_Delay == 10 &&
+   last_data_stored == local_intf.last_data_stored;};
+   topReadHit_inst.testSimpleReadHit(local_intf);
+   #100;
    
-   #100;
-   topReadMiss_inst.reset_DUT_inputs(local_intf);
-   #100;
+    
    $finish;
-    //top read hit
-//   local_intf       = g_intf;
-//   topReadHit_inst = new();
-//   topReadHit_inst.randomize() with {Address == 32'hdeadbeef;};
-//   topReadHit_inst.testSimpleReadHit(local_intf);
-//   $display("1) Test topReadHit_inst done with Address %x ", g_intf.Address);
-//   #100;
-//   $display("Data in cache is %x,",P1_DL.cb.Cache_var[{g_intf.Address[`INDEX_MSB: `INDEX_LSB],P1_DL.cb.Blk_access_proc}][`CACHE_DATA_MSB:`CACHE_DATA_LSB]);
-//   #100;
-//   topReadHit_inst.reset_DUT_inputs(local_intf);
-//   #100; 
-//   $finish;   
+       
  end 
 
-//always @(posedge g_intf.clk)begin 
-//   //$display("Blk_accessed_proc is from g_intf = %d, from cb = %d",g_intf.Blk_access_proc,P1_DL.cb.Blk_access_proc);
-// end
-//always @(posedge g_intf.clk) begin
-//   //$display("Updated MESI State Proc is %x at time = %d",P1_DL.cb.Updated_MESI_state_proc, $time);
-//end
+always @(posedge g_intf.clk)
+   g_intf.check_UndefinedBehavior();
 endmodule
