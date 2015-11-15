@@ -103,6 +103,7 @@ initial
    #20;
    $display("Testing Read Miss Scenario using topReadMiss test case when no other Cache contains the data");
    local_intf         = g_intf;
+
 // top read miss
    test_no            = 1;
    topReadMiss_inst   = new();
@@ -181,6 +182,7 @@ $display("Testing Read Miss Scenario using topReadMiss test case when other Cach
    #100;
    topWriteHit_inst.reset_DUT_inputs(local_intf);
    #100;
+
 //top read miss with replacement of a modified block required.
    //set up the DUT for this test by forcing data in all of the blocks of a
    //set to be written
@@ -209,6 +211,7 @@ $display("Testing Read Miss Scenario using topReadMiss test case when other Cach
     Max_Resp_Delay      == 10   && 
     Shared              == 0; 
    };
+
    
    topReadMissReplaceModified_inst.testReadMissReplaceModified(local_intf);
    #100;   
