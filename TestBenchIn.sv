@@ -90,7 +90,9 @@ topReadMiss  topReadMiss_inst;
 topReadHit   topReadHit_inst;
 topWriteMiss topWriteMiss_inst;
 topWriteHit  topWriteHit_inst;
-topReadMissReplaceModified topReadMissReplaceModified_inst;
+topReadMissReplaceModified      topReadMissReplaceModified_inst;
+topWriteMissModifiedReplacement topWriteMissModifiedReplacement_inst;
+topBusRdSnoop topBusRdSnoop_inst;
 reg[31:0] temp_addr;
 reg[31:0] temp_data;
 reg [7:0] test_no;
@@ -100,12 +102,13 @@ initial
    #20;
    $display("Testing Read Miss Scenario using topReadMiss test case");
    local_intf         = g_intf;
-// top read miss
+
+/*// top read miss
    test_no            = 1;
    topReadMiss_inst   = new();
-   topReadMiss_inst.randomize() with 
-    {Address          == 32'hdeadbeef &&
-     Max_Resp_Delay   == 10;};
+   topReadMiss_inst.Address = 32'hdeadbeef;
+   //{Address          == 32'hdeadbeef &&
+   topReadMiss_inst.Max_Resp_Delay   = 10;  //};
    temp_addr          = topReadMiss_inst.Address;
 
    topReadMiss_inst.testSimpleReadMiss(local_intf);
@@ -155,32 +158,48 @@ initial
    topWriteHit_inst.testSimpleWriteHit(local_intf);
    topWriteHit_inst.reset_DUT_inputs(local_intf);
    #100;
+*/
 //top read miss with replacement of a modified block required.
    //set up the DUT for this test by forcing data in all of the blocks of a
    //set to be written
   for(reg[15:0] i = 0; i< 4; i++) begin
    $display("***Setting up DUT Environment for ReadMiss Modified replacement test tag = %d **",i);
    topWriteMiss_inst   = new();
-   topWriteMiss_inst.randomize() with
-  {Address       == {i,14'd1,2'b00}  &&
-   Max_Resp_Delay     == 10     &&
-   wrData             == 32'hcafecafb; };
+//   topWriteMiss_inst
+   topWriteMiss_inst.Address        = {i,14'd1,2'b00}  ;
+   topWriteMiss_inst.Max_Resp_Delay = 10   ;
+   topWriteMiss_inst.wrData         = 32'hcafecafb;
 
    topWriteMiss_inst.testWriteMiss(local_intf);
    #100;
   end
+  topWriteMiss_inst.reset_DUT_inputs(local_intf);
+  #20;
    $display("***DONE Setting up DUT Environment for ReadMiss Modified replacement test");
    test_no            += 1;
-   topReadMissReplaceModified_inst = new();
-  topReadMissReplaceModified_inst.randomize() with
-   {Address[31:0]       == {16'd5,14'd1,2'b00}  && 
-    Max_Resp_Delay      == 10    ; 
-   };
+   topReadMissReplaceModified_inst                     = new();
+   topReadMissReplaceModified_inst.Address             = {16'd5,14'd1,2'b00};
+   topReadMissReplaceModified_inst.Max_Resp_Delay      = 10    ; 
+   
    
   topReadMissReplaceModified_inst.testReadMissReplaceModified(local_intf);
    #100;
+   topReadMissReplaceModified_inst.reset_DUT_inputs(local_intf);
+   #100;
+ //top write miss with replacement required for a modified block
+   topWriteMissModifiedReplacement_inst                = new();
+   topWriteMissModifiedReplacement_inst.Address        = {16'd5,14'd1,2'b00};
+   topWriteMissModifiedReplacement_inst.Max_Resp_Delay = 10;
+   topWriteMissModifiedReplacement_inst.wrData         = 32'hbeadbead;
    
-    
+   topWriteMissModifiedReplacement_inst.testWriteMissReplaceModified(local_intf);
+
+ //top Bus Read Snoop Test
+  topBusRdSnoop_inst = new();
+  temp_addr 
+  topBusRdSnoop_inst.Address = 32'hdeadbeef;
+  topBusRdSnoop_inst.testBusRdSnoop(sintf,P1_DL.cb.Cache_proc_contr[])
+   
    $finish;
        
  end 
