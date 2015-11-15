@@ -42,8 +42,6 @@ interface globalInterface(input logic clk);
    wire [`ADDRESSSIZE-1 : 0]	Address_Com;
    logic [`ADDRESSSIZE-1 : 0]	Address_Com_reg;
    wire [`ADDRESSSIZE-1 : 0]	Data_Bus_Com; 
-   logic [`ADDRESSSIZE-1 : 0]	Data_Bus_Com_reg;
-   assign Data_Bus_Com = PrRd || PrWr ? Data_Bus_Com_reg : 32'hZ;
 
    wire [`ADDRESSSIZE-1 : 0]	Data_Bus;
    reg  [`ADDRESSSIZE-1 : 0]	Data_Bus_reg;
@@ -82,11 +80,14 @@ interface globalInterface(input logic clk);
    logic [`CACHE_TAG_MESI_SIZE-1 : 0]Cache_proc_contr[0 : `CACHE_DEPTH-1];
    logic [1:0] Blk_access_proc;
 
+   logic [`LRU_SIZE-1 : 0]	LRU_var	[0:`NUM_OF_SETS-1];
+
    clocking ClkBlk @(posedge clk);
       output PrRd;
       output PrWr; 
       output Address;
       output Shared;
+      inout Data_Bus_Com;
    endclocking
 
    logic failed;

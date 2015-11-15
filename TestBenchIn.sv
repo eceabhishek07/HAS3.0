@@ -22,8 +22,9 @@ module top_C1();
  //Virtual interface for global interface
  virtual interface globalInterface local_intf;
  //Connect internal registers of DUT to interface
- assign g_intf.Cache_var = P1_DL.cb.Cache_var;
- assign g_intf.Cache_proc_contr = P1_DL.cb.Cache_proc_contr;
+ assign g_intf.Cache_var           = P1_DL.cb.Cache_var;
+ assign g_intf.Cache_proc_contr    = P1_DL.cb.Cache_proc_contr;
+ assign g_intf.LRU_var             = P1_DL.cc.LRU_var;
  always @(g_intf.clk) begin
    g_intf.Updated_MESI_state_proc  = P1_DL.cb.Updated_MESI_state_proc; 
    g_intf.Blk_access_proc          = P1_DL.cb.Blk_access_proc; 
@@ -84,41 +85,99 @@ arbiter a (
 			g_intf.Mem_snoop_gnt
 );
 
-//Instantiate a Top level direct testcase object
-topReadMiss topReadMiss_inst;
-topReadHit  topReadHit_inst;
-topReadMissReplaceModified topReadMissReplaceModified_inst;
+//Instantiate  Top level direct testcase object
+topReadMiss  topReadMiss_inst;
+topReadHit   topReadHit_inst;
 topWriteMiss topWriteMiss_inst;
+topWriteHit  topWriteHit_inst;
+topReadMissReplaceModified topReadMissReplaceModified_inst;
 reg[31:0] temp_addr;
 reg[31:0] temp_data;
+reg [7:0] test_no;
+
 initial
  begin
    #20;
    $display("Testing Read Miss Scenario using topReadMiss test case");
-   local_intf       = g_intf;
+   local_intf         = g_intf;
 // top read miss
-   topReadMiss_inst = new();
-   topReadMiss_inst.randomize() with {Address == 32'hdeadbeef &&
-Max_Resp_Delay == 10;};
-   temp_addr = topReadMiss_inst.Address;
+   test_no            = 1;
+   topReadMiss_inst   = new();
+   topReadMiss_inst.randomize() with 
+    {Address          == 32'hdeadbeef &&
+     Max_Resp_Delay   == 10;};
+   temp_addr          = topReadMiss_inst.Address;
+
    topReadMiss_inst.testSimpleReadMiss(local_intf);
-   temp_data = P1_DL.cb.Cache_var[{temp_addr[`INDEX_MSB: `INDEX_LSB],2'b00}][`CACHE_DATA_MSB: `CACHE_DATA_LSB];
+   //print lRU value
+   temp_data          = P1_DL.cb.Cache_var[{temp_addr[`INDEX_MSB: `INDEX_LSB],2'b00}][`CACHE_DATA_MSB: `CACHE_DATA_LSB];
+   
    #10;
    topReadMiss_inst.reset_DUT_inputs(local_intf); 
    #100;
-   topReadHit_inst = new();
+//top read hit
+   test_no            += 1;
+   topReadHit_inst    = new();
    topReadHit_inst.randomize() with {Address == 32'hdeadbeef &&
-   Max_Resp_Delay == 30 &&
-   last_data_stored == temp_data;};
+   Max_Resp_Delay     == 30 &&
+   last_data_stored   == temp_data;};
    topReadHit_inst.testSimpleReadHit(local_intf);
    #100;
    topReadHit_inst.reset_DUT_inputs(local_intf); 
    #100;
-   topWriteMiss_inst = new();
-   topWriteMiss_inst.randomize() with {Address == 32'hbabecafe &&
-   Max_Resp_Delay == 10 &&
-   wrData         == 32'hcafecafe; };
+//top write miss
+   test_no            += 1;
+   topWriteMiss_inst  = new();
+   topWriteMiss_inst.randomize() with
+  {Address            == 32'hbabecafe &&
+   Max_Resp_Delay     == 10 &&
+   wrData             == 32'hcafecafe; };
    topWriteMiss_inst.testWriteMiss(local_intf);
+   topWriteMiss_inst.reset_DUT_inputs(local_intf); 
+   #100;
+//top write hit on the block previously written so that the initial MESI state is MODIFIED
+   test_no            += 1;
+   topWriteHit_inst   = new();
+   topWriteHit_inst.randomize() with
+   {Address           == 32'hbabecafe &&
+    Max_Resp_Delay    == 10 &&
+    wrData            == 32'hbaabbaab;};
+   topWriteHit_inst.testSimpleWriteHit(local_intf);
+   topWriteHit_inst.reset_DUT_inputs(local_intf);
+   #100;
+//top write hit on the block previously read so that the initial MESI state is EXCLUSIVE(Code not fixed so should give shared instead)
+   test_no            += 1;
+   topWriteHit_inst   = new();
+   topWriteHit_inst.randomize() with
+   {Address           == 32'hdeadbeef &&
+    Max_Resp_Delay    == 10 &&
+    wrData            == 32'hbaabbaab;};
+   topWriteHit_inst.testSimpleWriteHit(local_intf);
+   topWriteHit_inst.reset_DUT_inputs(local_intf);
+   #100;
+//top read miss with replacement of a modified block required.
+   //set up the DUT for this test by forcing data in all of the blocks of a
+   //set to be written
+  for(reg[15:0] i = 0; i< 4; i++) begin
+   $display("***Setting up DUT Environment for ReadMiss Modified replacement test tag = %d **",i);
+   topWriteMiss_inst   = new();
+   topWriteMiss_inst.randomize() with
+  {Address       == {i,14'd1,2'b00}  &&
+   Max_Resp_Delay     == 10     &&
+   wrData             == 32'hcafecafb; };
+
+   topWriteMiss_inst.testWriteMiss(local_intf);
+   #100;
+  end
+   $display("***DONE Setting up DUT Environment for ReadMiss Modified replacement test");
+   test_no            += 1;
+   topReadMissReplaceModified_inst = new();
+  topReadMissReplaceModified_inst.randomize() with
+   {Address[31:0]       == {16'd5,14'd1,2'b00}  && 
+    Max_Resp_Delay      == 10    ; 
+   };
+   
+  topReadMissReplaceModified_inst.testReadMissReplaceModified(local_intf);
    #100;
    
     
