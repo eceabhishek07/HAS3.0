@@ -586,7 +586,7 @@ class topReadMissReplaceModified extends baseTestClass;
       lineToBeRepl =  determine_LineToBeReplaced_LRU(sintf.LRU_var[Address[`INDEX_MSB:`INDEX_LSB]]);
       $display("Address of the Block to be replaced = %x, Data at that location = %x",Address,sintf.Cache_var[{Address[`INDEX_MSB:`INDEX_LSB],lineToBeRepl}][`CACHE_DATA_MSB:`CACHE_DATA_LSB]); 
       delay = 0;
-      fork
+     fork
         begin 
          while(delay <= Max_Resp_Delay) begin
            @(posedge sintf.clk);
@@ -598,10 +598,11 @@ class topReadMissReplaceModified extends baseTestClass;
         end
       join_any
       disable fork;
+     
       
       assert(sintf.Address_Com[31:2] == {sintf.Cache_proc_contr[{Address[`INDEX_MSB:`INDEX_LSB],lineToBeRepl}][`CACHE_TAG_MSB:`CACHE_TAG_LSB],Address[`INDEX_MSB:`INDEX_LSB]} ) $display("SUCCESS::Address_Com is loaded with correct address of the block to be replaced");
-      else $display("BUG::  testReadMissReplaceModified Checker: Expected Address_Com = %x, Actual Address_Com = %x",{sintf.Cache_proc_contr[{Address[`INDEX_MSB:`INDEX_LSB],lineToBeRepl}][`CACHE_TAG_MSB:`CACHE_TAG_LSB],Address[`INDEX_MSB:`INDEX_LSB]},sintf.Address_Com[31:0]);
-      
+      else $display("BUG:: Expected Address_Com = %x, Actual Address_Com = %x",{sintf.Cache_proc_contr[{Address[`INDEX_MSB:`INDEX_LSB],lineToBeRepl}][`CACHE_TAG_MSB:`CACHE_TAG_LSB],Address[`INDEX_MSB:`INDEX_LSB]},sintf.Address_Com[31:0]);
+      $display("SUCCESS::  Expected Address_Com = %x, Actual Address_Com = %x",{sintf.Cache_proc_contr[{Address[`INDEX_MSB:`INDEX_LSB],lineToBeRepl}][`CACHE_TAG_MSB:`CACHE_TAG_LSB],Address[`INDEX_MSB:`INDEX_LSB]},sintf.Address_Com[31:0]);
       //Wait till Mem_wr signal is made high
       delay = 0;
       fork
@@ -618,12 +619,15 @@ class topReadMissReplaceModified extends baseTestClass;
       disable fork;
       
       assert(sintf.Mem_wr) $display("SUCCESS:: Mem_wr is asserted");
-      else $display("BUG:: Mem_wr is not asserted", $time);
+      else $display("BUG:: Mem_wr is not asserted", $time);    
       check_DataBusCom_valid(sintf,sintf.Cache_var[{Address[`INDEX_MSB:`INDEX_LSB],lineToBeRepl}][`CACHE_DATA_MSB:`CACHE_DATA_LSB]);
-      $display("Expected data on bus = %x, actual data on bus = %x",sintf.Cache_var[{Address[`INDEX_MSB:`INDEX_LSB],lineToBeRepl}][`CACHE_DATA_MSB:`CACHE_DATA_LSB],sintf.Data_Bus_Com);
+      //$display("Expected data on bus = %x, actual data on bus = %x",sintf.Cache_var[{Address[`INDEX_MSB:`INDEX_LSB],lineToBeRepl}][`CACHE_DATA_MSB:`CACHE_DATA_LSB],sintf.Data_Bus_Com);
       //Memory asserts Memory Wr Done
-      //sintf.Mem_write_done = 1;
-     //free block is now available. Cache will do free block operations for read miss.             
+      sintf.Mem_write_done = 1;
+     //free block is now available. Cache will do free block operations for read miss.
+     repeat(10*Max_Resp_Delay) @(posedge sintf.clk);   
+     sintf.Mem_write_done = 0;          
+     $display("****** Test topReadMissReplaceModified Done Status = %s ******\n",!sintf.failed?status:"FAILED"); 
      endtask : testReadMissReplaceModified
 
 endclass : topReadMissReplaceModified
@@ -677,7 +681,7 @@ endclass: topWriteMiss
 class topWriteMissModifiedReplacement extends baseTestClass;
    //data to be written
    rand int wrData;
-   constraint c_wrData  {wrData inside {32'h00000000,32'hffffffff};}
+   constraint c_wrData  {wrData inside {[32'h00000000:32'hffffffff]};}
    task testWriteMissReplaceModified(virtual interface globalInterface sintf);
         begin
           sintf.ClkBlk.PrWr      <= 1; 
@@ -758,7 +762,7 @@ class topWriteHit extends baseTestClass;
     task testSimpleWriteHit(virtual interface globalInterface sintf);
          $display("\n****** Test topWriteHit Started ****** "); 
                         //store the MESI State
-                        MESI_state = sintf.Cache_proc_contr[{Address[`INDEX_MSB:`INDEX_LSB],2'b00}][`CACHE_MESI_MSB:`CACHE_MESI_LSB];
+                        MESI_state = mesiStateType'(sintf.Cache_proc_contr[{Address[`INDEX_MSB:`INDEX_LSB],2'b00}][`CACHE_MESI_MSB:`CACHE_MESI_LSB]);
          $display("Current MESI State of the Block is %s",MESI_state.name());
 			//Do a Write
 			sintf.ClkBlk.Address <= Address;
