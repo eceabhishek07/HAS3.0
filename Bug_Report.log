@@ -1,5 +1,7 @@
 ****** Bug Report for L1 MESI Cache in a Multicore Environment. Bus are presented in
 the order of testing.*****
+UNIT and MACRO LEVEL testing are not done since their modules are not defined in the
+Design.
 
 COMPILER USED: Cadence - NCVERILOG
 
@@ -227,10 +229,20 @@ BUG:: Com_Bus_Req_Snoop is asserted while it should remain de-asserted
 
 i) ******Test topBusRdSnoop Started*********
 Bus Read  Attempt is made for Address = 00640004
-ncsim: *E,ASRTST (./TestCases.sv,72): (time 2210 PS) Assertion worklib.$unit_0x60362cfa::baseTestClass::check_ComBusReqSnoop_assert.__assert_2 has failed 
+ncsim: *E,ASRTST (./TestCases.sv,72): (time 2210 PS) Assertion worklib.$unit_0x60362cfa::baseTestClass::check_ComBusReqSnoop_assert.__assert_2 has failed
 BUG:: Com_Bus_Req_snoop_0 is not asserted after BusRd/BusRdX
 MESI State of the Block to Be accessed = 3
 Last Test Timedout.. Moving on
+
+FIX: inout signals need to be 'Z' when not driven by _reg internal registers.
+AFTER FIX:
+Bus Read  Attempt is made for Address = 00640004
+SUCCESS:: Com_Bus_Req_snoop_0 is asserted within timeout after BusRd/BusRdX is asserted
+MESI State of the Block to Be accessed = 3
+Last Test Timedout.. Moving on
+
+ 
+
 
 j) ******Test topBusRdXSnoop Started*********
 Bus ReadX  Attempt is made for Address = 00640004
@@ -238,9 +250,23 @@ ncsim: *E,ASRTST (./TestCases.sv,72): (time 2610 PS) Assertion worklib.$unit_0x6
 BUG:: Com_Bus_Req_snoop_0 is not asserted after BusRd/BusRdX
 MESI State of the Block to Be accessed = 3
 Last Test Timedout.. Moving on
+SAME FIX AS ABOVE.
+AFTER FIX:
+Bus ReadX  Attempt is made for Address = 00640004
+SUCCESS:: Com_Bus_Req_snoop_0 is asserted within timeout after BusRd/BusRdX is asserted
+MESI State of the Block to Be accessed = 3
+Last Test Timedout.. Moving on
 
 
-*************ADD LATER*********************
+k) ****** TEST topSnoopInvalidate Started ******
+
+ncsim: *E,ASRTST (./TestCases.sv,1037): (time 2924 PS) Assertion worklib.$unit_0x60362cfa::topSnoopInvalidate::testInvalidation.__assert_32 has failed 
+BUG:: Invalidation Not Done upon snooping Invalidate
+
+****** Test topSnoopInvalidate Done Status = FAILED ******
+
+
+
 
 
 
