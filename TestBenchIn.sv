@@ -29,6 +29,8 @@ module top_C1();
  always @(g_intf.clk) begin
    g_intf.Updated_MESI_state_proc  = P1_DL.cb.Updated_MESI_state_proc; 
    g_intf.Blk_access_proc          = P1_DL.cb.Blk_access_proc;
+   g_intf.Blk_access_snoop         = P1_DL.cb.Blk_access_snoop;
+   g_intf.Index_snoop              = P1_DL.cb.Index_snoop;
     
  end
 cache_wrapper_1 P1_DL (
@@ -87,13 +89,18 @@ arbiter a (
 			g_intf.Mem_snoop_gnt
 );
 
-//Instantiate  Top level direct testcase object
-topReadMiss  topReadMiss_inst;
-topReadHit   topReadHit_inst;
-topWriteMiss topWriteMiss_inst;
-topWriteHit  topWriteHit_inst;
+//Instantiate  Top level direct testcase object. Please consider that these
+//test cases consider more than 1 scenario specified in Test Plan and As
+//commented in TestCases.sv file
+topReadMiss                     topReadMiss_inst;
+topReadHit                      topReadHit_inst;
+topWriteMiss                    topWriteMiss_inst;
+topWriteHit                     topWriteHit_inst;
 topReadMissReplaceModified      topReadMissReplaceModified_inst;
 topWriteMissModifiedReplacement topWriteMissModifiedReplacement_inst;
+topBusRdSnoop                   topBusRdSnoop_inst;
+topBusRdXSnoop                  topBusRdXSnoop_inst;
+topSnoopInvalidate              topSnoopInvalidate_inst;
 reg[31:0] temp_addr;
 reg[31:0] temp_data;
 reg [7:0] test_no;
@@ -101,15 +108,14 @@ reg [7:0] test_no;
 initial
  begin
    #20;
-   $display("Testing Read Miss Scenario using topReadMiss test case when no other Cache contains the data");
+$display("************** STARTING TOP LEVEL TESTING ******************"); 
    local_intf         = g_intf;
-
 // top read miss
    test_no            = 1;
    topReadMiss_inst   = new();
    topReadMiss_inst.randomize() with 
     {Address          == 32'hdeadbeef &&
-     Shared           == 1'b0;  
+     Shared           == 1'b0 &&  
      Max_Resp_Delay   == 10;};
     temp_addr          = topReadMiss_inst.Address;
 
@@ -182,7 +188,6 @@ $display("Testing Read Miss Scenario using topReadMiss test case when other Cach
    #100;
    topWriteHit_inst.reset_DUT_inputs(local_intf);
    #100;
-
 //top read miss with replacement of a modified block required.
    //set up the DUT for this test by forcing data in all of the blocks of a
    //set to be written
@@ -211,7 +216,6 @@ $display("Testing Read Miss Scenario using topReadMiss test case when other Cach
     Max_Resp_Delay      == 10   && 
     Shared              == 0; 
    };
-
    
    topReadMissReplaceModified_inst.testReadMissReplaceModified(local_intf);
    #100;   
@@ -225,10 +229,55 @@ $display("Testing Read Miss Scenario using topReadMiss test case when other Cach
    topWriteMissModifiedReplacement_inst.wrData         = 32'hbeadbead;
    
    topWriteMissModifiedReplacement_inst.testWriteMissReplaceModified(local_intf);
+   #100;
+   topWriteMissModifiedReplacement_inst.reset_DUT_inputs(local_intf);
+   #100;
+ //top bus read snoop
+   test_no += 1;
+   topBusRdSnoop_inst                = new();
+   topBusRdSnoop_inst.Address        = {16'd100,14'd1,2'b00};
+   topBusRdSnoop_inst.Max_Resp_Delay = 10;
+   fork
+   topBusRdSnoop_inst.testBusRdSnoop(local_intf);
+   begin
+     #200;
+     $display("Last Test Timedout.. Moving on");
+   end
+   join_any;
+   disable fork;
+   #100;
    
-      #100; 
+   topBusRdSnoop_inst.reset_DUT_inputs(local_intf);
+   #100;
+ //top bus read with an intent to write snoop
+   test_no += 1;
+   topBusRdXSnoop_inst                = new();
+   topBusRdXSnoop_inst.Address        =  {16'd100,14'd1,2'b00};
+   topBusRdXSnoop_inst.Max_Resp_Delay = 10;
+   fork
+     topBusRdXSnoop_inst.testBusRdXSnoop(local_intf);
+     begin
+      #200;
+      $display("Last Test Timedout.. Moving on");
+     end
+   join_any;
+   disable fork;
+   #100;
+//top Snoop Invalidate test
+   topSnoopInvalidate_inst                = new();
+   topSnoopInvalidate_inst.reset_DUT_inputs(local_intf);
+   topSnoopInvalidate_inst.Address        = {16'd100,14'd1,2'b00};
+   topSnoopInvalidate_inst.Max_Resp_Delay = 10;
+   topSnoopInvalidate_inst.testInvalidation(local_intf);
+   #100;
    $finish;       
+
+
  end 
+ 
+
+ 
+
 
 always @(posedge g_intf.clk)
    g_intf.check_UndefinedBehavior();

@@ -27,8 +27,10 @@ interface globalInterface(input logic clk);
    wire 			Shared;
    wire         		BusRd;
    reg          		BusRd_reg;
+   assign BusRd = PrRd? 1'bZ: BusRd_reg;
    wire 		        BusRdX;
    reg  		        BusRdX_reg;
+   assign BusRdX = PrWr ? 1'bZ : BusRdX_reg;
    wire 			Invalidate;
    wire 		        Invalidation_done;
    logic 			Shared_local;
@@ -41,6 +43,7 @@ interface globalInterface(input logic clk);
    assign Data_in_Bus = PrRd|| PrWr ? Data_in_Bus_reg : 1'bz;
    wire [`ADDRESSSIZE-1 : 0]	Address_Com;
    logic [`ADDRESSSIZE-1 : 0]	Address_Com_reg;
+   assign Address_Com = PrRd || PrWr ? 32'hZ : Address_Com_reg; 
    wire [`ADDRESSSIZE-1 : 0]	Data_Bus_Com; 
 
    wire [`ADDRESSSIZE-1 : 0]	Data_Bus;
@@ -76,9 +79,11 @@ interface globalInterface(input logic clk);
    logic [`BLK_OFFSET_SIZE - 1 : 0] Blk_offset_proc;
    logic [`TAG_SIZE - 1 : 0]        Tag_proc;
    logic [`INDEX_SIZE - 1 : 0]      Index_proc; 
+   logic [`INDEX_SIZE - 1 : 0]      Index_snoop; 
    logic [`CACHE_DATA_SIZE-1 : 0]    Cache_var	    [0 : `CACHE_DEPTH-1];
    logic [`CACHE_TAG_MESI_SIZE-1 : 0]Cache_proc_contr[0 : `CACHE_DEPTH-1];
    logic [1:0] Blk_access_proc;
+   logic [1:0] Blk_access_snoop;
 
    logic [`LRU_SIZE-1 : 0]	LRU_var	[0:`NUM_OF_SETS-1];
 
@@ -88,6 +93,7 @@ interface globalInterface(input logic clk);
       output Address;
       output Shared;
       inout Data_Bus_Com;
+      inout Invalidate;
    endclocking
 
    logic failed;
